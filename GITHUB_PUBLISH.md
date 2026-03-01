@@ -382,7 +382,46 @@ git log --stat
 - 使用 Personal Access Token（HTTPS）
 - 或配置 SSH 密钥（推荐）
 
-### Q2: 如何更新远程仓库地址？
+### Q2: 提示 "error: remote origin already exists"
+
+**原因**：已经存在名为 `origin` 的远程仓库。
+
+**解决方案**：
+
+**方法一：更新现有远程仓库地址（推荐）**
+```bash
+# 查看当前远程仓库地址
+git remote -v
+
+# 更新为新的仓库地址
+git remote set-url origin https://github.com/your-username/worklog.git
+
+# 验证更新结果
+git remote -v
+```
+
+**方法二：删除后重新添加**
+```bash
+# 删除现有的 origin
+git remote remove origin
+
+# 重新添加
+git remote add origin https://github.com/your-username/worklog.git
+
+# 验证
+git remote -v
+```
+
+**方法三：使用不同的名称**
+```bash
+# 使用其他名称添加远程仓库
+git remote add github https://github.com/your-username/worklog.git
+
+# 推送时使用新名称
+git push -u github main
+```
+
+### Q3: 如何更新远程仓库地址？
 
 ```bash
 # 查看当前远程地址
