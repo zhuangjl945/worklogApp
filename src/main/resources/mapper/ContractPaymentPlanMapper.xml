@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zjl.worklog.contract.mapper.ContractPaymentPlanMapper">
+
+    <resultMap id="ContractPaymentPlanEntityMap" type="com.zjl.worklog.contract.entity.ContractPaymentPlanEntity">
+        <id column="id" property="id"/>
+        <result column="contract_id" property="contractId"/>
+        <result column="plan_no" property="planNo"/>
+        <result column="plan_type" property="planType"/>
+        <result column="plan_amount" property="planAmount"/>
+        <result column="plan_date" property="planDate"/>
+        <result column="condition_desc" property="conditionDesc"/>
+
+        <result column="actual_date" property="actualDate"/>
+        <result column="actual_amount" property="actualAmount"/>
+        <result column="voucher_no" property="voucherNo"/>
+        <result column="pay_method" property="payMethod"/>
+        <result column="remark" property="remark"/>
+        <result column="recorded_by" property="recordedBy"/>
+        <result column="recorded_time" property="recordedTime"/>
+
+        <result column="status" property="status"/>
+        <result column="created_time" property="createdTime"/>
+    </resultMap>
+
+    <select id="selectByContractId" resultMap="ContractPaymentPlanEntityMap">
+        SELECT id, contract_id, plan_no, plan_type, plan_amount, plan_date, condition_desc,
+               actual_date, actual_amount, voucher_no, pay_method, remark, recorded_by, recorded_time,
+               status, created_time
+        FROM contract_payment_plan
+        WHERE contract_id = #{contractId}
+        ORDER BY plan_date ASC, id ASC
+    </select>
+
+    <select id="selectById" resultMap="ContractPaymentPlanEntityMap">
+        SELECT id, contract_id, plan_no, plan_type, plan_amount, plan_date, condition_desc,
+               actual_date, actual_amount, voucher_no, pay_method, remark, recorded_by, recorded_time,
+               status, created_time
+        FROM contract_payment_plan
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <insert id="insertBatch">
+        INSERT INTO contract_payment_plan (
+            contract_id, plan_no, plan_type, plan_amount, plan_date, condition_desc,
+            actual_date, actual_amount, voucher_no, pay_method, remark, recorded_by, recorded_time,
+            status
+        )
+        VALUES
+        <foreach collection="plans" item="p" separator=",">
+            (
+                #{p.contractId}, #{p.planNo}, #{p.planType}, #{p.planAmount}, #{p.planDate}, #{p.conditionDesc},
+                #{p.actualDate}, #{p.actualAmount}, #{p.voucherNo}, #{p.payMethod}, #{p.remark}, #{p.recordedBy}, #{p.recordedTime},
+                #{p.status}
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateRecord">
+        UPDATE contract_payment_plan
+        <set>
+            <if test="actualDate != null">actual_date = #{actualDate},</if>
+            <if test="actualAmount != null">actual_amount = #{actualAmount},</if>
+            <if test="voucherNo != null">voucher_no = #{voucherNo},</if>
+            <if test="payMethod != null">pay_method = #{payMethod},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="recordedBy != null">recorded_by = #{recordedBy},</if>
+            <if test="recordedTime != null">recorded_time = #{recordedTime},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE contract_payment_plan
+        SET status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <select id="sumActualAmountByContractId" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(actual_amount), 0)
+        FROM contract_payment_plan
+        WHERE contract_id = #{contractId}
+          AND actual_amount IS NOT NULL
+          AND status = 20
+    </select>
+
+    <update id="markOverdueBefore">
+        UPDATE contract_payment_plan
+        SET status = 30
+        WHERE status = 10
+          AND plan_date &lt; #{date}
+    </update>
+
+    <select id="selectExpiring" resultMap="ContractPaymentPlanEntityMap">
+        SELECT id, contract_id, plan_no, plan_type, plan_amount, plan_date, condition_desc,
+               actual_date, actual_amount, voucher_no, pay_method, remark, recorded_by, recorded_time,
+               status, created_time
+        FROM contract_payment_plan
+        WHERE status = #{status}
+          AND plan_date &lt;= DATE_ADD(CURDATE(), INTERVAL #{days} DAY)
+        ORDER BY plan_date ASC
+    </select>
+
+    <select id="selectExpiringWithDept" resultMap="ContractPaymentPlanEntityMap">
+        SELECT pp.id, pp.contract_id, pp.plan_no, pp.plan_type, pp.plan_amount, pp.plan_date, pp.condition_desc,
+               pp.actual_date, pp.actual_amount, pp.voucher_no, pp.pay_method, pp.remark, pp.recorded_by, pp.recorded_time,
+               pp.status, pp.created_time
+        FROM contract_payment_plan pp
+        INNER JOIN contract_main cm ON cm.id = pp.contract_id
+        WHERE cm.deleted = 0
+          AND pp.status = #{status}
+          <if test="deptId != null">AND cm.dept_id = #{deptId}</if>
+          AND pp.plan_date &lt;= DATE_ADD(CURDATE(), INTERVAL #{days} DAY)
+        ORDER BY pp.plan_date ASC
+    </select>
+
+</mapper>
