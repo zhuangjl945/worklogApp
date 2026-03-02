@@ -4,6 +4,8 @@
 
 工作日志管理系统是一个基于 **Spring Boot + Vue 3** 的内部管理系统，用于记录和统计日常工作情况，并对供应商、合同等信息进行统一管理。  
 适合科室/部门级别的工作登记、统计分析和简单的业务协同。
+## 项目截图
+<img width="1850" height="970" alt="image" src="https://github.com/user-attachments/assets/595078d2-060e-47b2-a6b8-e13c209a92f7" />
 
 ---
 
