@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zjl.worklog.work.mapper.WorkRecordMapper">
+
+    <resultMap id="WorkRecordMap" type="com.zjl.worklog.work.entity.WorkRecord">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="dept_id" property="deptId"/>
+        <result column="biz_dept_id" property="bizDeptId"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="status_id" property="statusId"/>
+        <result column="title" property="title"/>
+        <result column="content" property="content"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="duration_minutes" property="durationMinutes"/>
+        <result column="is_important" property="isImportant"/>
+        <result column="image_urls" property="imageUrls"/>
+        <result column="deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="WorkCategoryStatMap" type="com.zjl.worklog.work.dto.WorkCategoryStat">
+        <result column="user_id" property="userId"/>
+        <result column="real_name" property="realName"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="totalCount" property="totalCount"/>
+        <result column="totalAmount" property="totalAmount"/>
+    </resultMap>
+
+    <resultMap id="WorkCategorySummaryMap" type="com.zjl.worklog.work.dto.WorkCategorySummary">
+        <result column="category_name" property="categoryName"/>
+        <result column="totalCount" property="totalCount"/>
+    </resultMap>
+
+    <resultMap id="WorkloadUserDeptCategoryStatMap" type="com.zjl.worklog.work.dto.WorkloadUserDeptCategoryStat">
+        <result column="user_id" property="userId"/>
+        <result column="real_name" property="realName"/>
+        <result column="dept_id" property="deptId"/>
+        <result column="dept_name" property="deptName"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="totalCount" property="totalCount"/>
+        <result column="totalAmount" property="totalAmount"/>
+    </resultMap>
+
+    <sql id="BaseColumns">
+        id, user_id, dept_id, biz_dept_id, category_id, status_id, title, content, image_urls,
+        start_time, end_time, duration_minutes, is_important, deleted, create_time, update_time
+    </sql>
+
+    <sql id="WhereClause">
+        <where>
+            AND deleted = 0
+            <if test="userId != null">AND user_id = #{userId}</if>
+            <if test="categoryIds != null and categoryIds.size() > 0">
+                AND category_id IN
+                <foreach item="cid" index="index" collection="categoryIds" open="(" separator="," close=")">
+                    #{cid}
+                </foreach>
+            </if>
+            <if test="(categoryIds == null or categoryIds.size() == 0) and categoryId != null">
+                AND category_id = #{categoryId}
+            </if>
+            <if test="title != null and title != ''">AND title LIKE #{title}</if>
+            <if test="statusIds != null and statusIds.size() > 0">
+                AND status_id IN
+                <foreach item="item" index="index" collection="statusIds" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="createTimeFrom != null">AND create_time &gt;= #{createTimeFrom}</if>
+            <if test="createTimeTo != null">AND create_time &lt;= #{createTimeTo}</if>
+        </where>
+    </sql>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM work_record
+        <include refid="WhereClause"/>
+    </select>
+
+    <select id="selectPage" resultMap="WorkRecordMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record
+        <include refid="WhereClause"/>
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="selectById" resultMap="WorkRecordMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record
+        WHERE id = #{id} AND user_id = #{userId} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="statsByCategory" resultMap="WorkCategoryStatMap">
+        SELECT
+            wr.user_id,
+            u.real_name,
+            wr.category_id,
+            wc.category_name,
+            COUNT(wr.id) AS totalCount,
+            SUM(wre.amount) AS totalAmount
+        FROM work_record wr
+        JOIN user u ON wr.user_id = u.id
+        LEFT JOIN work_category wc ON wr.category_id = wc.id
+        LEFT JOIN work_record_expense wre ON wr.id = wre.work_record_id
+        <where>
+            wr.deleted = 0
+            <if test="userId != null">AND wr.user_id = #{userId}</if>
+            <if test="endTimeFrom != null">AND wr.create_time &gt;= #{endTimeFrom}</if>
+            <if test="endTimeTo != null">AND wr.create_time &lt;= #{endTimeTo}</if>
+        </where>
+        GROUP BY wr.user_id, u.real_name, wr.category_id, wc.category_name
+        ORDER BY wr.user_id, totalCount DESC
+    </select>
+
+    <select id="getCategorySummary" resultMap="WorkCategorySummaryMap">
+        SELECT
+            wc.category_name,
+            COUNT(wr.id) AS totalCount
+        FROM work_record wr
+        LEFT JOIN work_category wc ON wr.category_id = wc.id
+        <where>
+            wr.deleted = 0
+            AND wr.user_id = #{userId}
+            <if test="startTimeFrom != null">AND wr.create_time &gt;= #{startTimeFrom}</if>
+            <if test="startTimeTo != null">AND wr.create_time &lt;= #{startTimeTo}</if>
+        </where>
+        GROUP BY wr.category_id, wc.category_name
+        ORDER BY totalCount DESC
+    </select>
+
+    <select id="statsUserDeptCategory" resultMap="WorkloadUserDeptCategoryStatMap">
+        WITH RECURSIVE target_depts AS (
+            SELECT id FROM dept WHERE id = #{deptId}
+            UNION ALL
+            SELECT d.id FROM dept d INNER JOIN target_depts td ON d.parent_id = td.id
+        )
+        SELECT
+            wr.user_id,
+            u.real_name,
+            wr.dept_id,
+            d.dept_name,
+            wr.category_id,
+            wc.category_name,
+            COUNT(DISTINCT wr.id) AS totalCount,
+            COALESCE(SUM(wre.amount), 0) AS totalAmount
+        FROM work_record wr
+        JOIN user u ON wr.user_id = u.id
+        LEFT JOIN dept d ON wr.dept_id = d.id
+        LEFT JOIN work_category wc ON wr.category_id = wc.id
+        LEFT JOIN work_record_expense wre ON wr.id = wre.work_record_id
+        <where>
+            wr.deleted = 0
+            <if test="endTimeFrom != null">AND wr.create_time &gt;= #{endTimeFrom}</if>
+            <if test="endTimeTo != null">AND wr.create_time &lt;= #{endTimeTo}</if>
+            <if test="deptId != null">
+                AND wr.dept_id IN (SELECT id FROM target_depts)
+            </if>
+            <if test="userId != null">AND wr.user_id = #{userId}</if>
+        </where>
+        GROUP BY wr.user_id, u.real_name, wr.dept_id, d.dept_name, wr.category_id, wc.category_name
+        ORDER BY d.dept_name, u.real_name, totalCount DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO work_record (
+            user_id, dept_id, biz_dept_id, category_id, status_id,
+            title, content, image_urls, start_time, end_time, duration_minutes,
+            is_important, deleted
+        ) VALUES (
+            #{userId}, #{deptId}, #{bizDeptId}, #{categoryId}, #{statusId},
+            #{title}, #{content}, #{imageUrls}, #{startTime}, #{endTime}, #{durationMinutes},
+            #{isImportant}, 0
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE work_record
+        <set>
+            <if test="bizDeptId != null">biz_dept_id = #{bizDeptId},</if>
+            <if test="categoryId != null">category_id = #{categoryId},</if>
+            <if test="statusId != null">status_id = #{statusId},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="imageUrls != null">image_urls = #{imageUrls},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="endTime != null">end_time = #{endTime},</if>
+            <if test="durationMinutes != null">duration_minutes = #{durationMinutes},</if>
+            <if test="isImportant != null">is_important = #{isImportant},</if>
+        </set>
+        WHERE id = #{id} AND user_id = #{userId} AND deleted = 0
+    </update>
+
+    <update id="softDelete">
+        UPDATE work_record
+        SET deleted = 1
+        WHERE id = #{id} AND user_id = #{userId} AND deleted = 0
+    </update>
+
+    <update id="transferOwner">
+        UPDATE work_record
+        SET user_id = #{toUserId},
+            dept_id = #{toDeptId}
+        WHERE id = #{id}
+          AND user_id = #{fromUserId}
+          AND deleted = 0
+    </update>
+
+</mapper>
