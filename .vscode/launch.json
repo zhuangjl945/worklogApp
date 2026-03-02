@@ -1,0 +1,27 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "WorklogApplication",
+            "request": "launch",
+            "mainClass": "com.zjl.worklog.WorklogApplication",
+            "projectName": "worklog"
+        },
+        {
+            "type": "java",
+            "name": "Launch Java Program",
+            "request": "launch",
+            "mainClass": ""
+        },
+        {
+            "type": "node-terminal",
+            "name": "JavaScript 调试终端",
+            "request": "launch",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
