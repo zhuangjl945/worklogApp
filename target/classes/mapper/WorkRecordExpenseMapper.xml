@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zjl.worklog.work.mapper.WorkRecordExpenseMapper">
+
+    <resultMap id="WorkRecordExpenseMap" type="com.zjl.worklog.work.entity.WorkRecordExpense">
+        <id column="id" property="id"/>
+        <result column="work_record_id" property="workRecordId"/>
+        <result column="expense_type" property="expenseType"/>
+        <result column="amount" property="amount"/>
+        <result column="description" property="description"/>
+        <result column="expense_time" property="expenseTime"/>
+    </resultMap>
+
+    <resultMap id="WorkExpenseStatMap" type="com.zjl.worklog.work.dto.WorkExpenseStat">
+        <result column="expense_type" property="expenseType"/>
+        <result column="totalAmount" property="totalAmount"/>
+    </resultMap>
+
+    <select id="selectByWorkRecordId" resultMap="WorkRecordExpenseMap">
+        SELECT id, work_record_id, expense_type, amount, description, expense_time
+        FROM work_record_expense
+        WHERE work_record_id = #{workRecordId}
+        ORDER BY expense_time DESC
+    </select>
+
+    <select id="selectById" resultMap="WorkRecordExpenseMap">
+        SELECT id, work_record_id, expense_type, amount, description, expense_time
+        FROM work_record_expense
+        WHERE id = #{id}
+    </select>
+
+    <select id="statsByExpenseType" resultMap="WorkExpenseStatMap">
+        SELECT
+            wre.expense_type,
+            SUM(wre.amount) AS totalAmount
+        FROM work_record_expense wre
+        LEFT JOIN work_record wr ON wre.work_record_id = wr.id
+        <where>
+            wr.user_id = #{userId}
+            AND wr.deleted = 0
+            <if test="expenseTimeFrom != null">AND wre.expense_time &gt;= #{expenseTimeFrom}</if>
+            <if test="expenseTimeTo != null">AND wre.expense_time &lt;= #{expenseTimeTo}</if>
+        </where>
+        GROUP BY wre.expense_type
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO work_record_expense (work_record_id, expense_type, amount, description, expense_time)
+        VALUES (#{workRecordId}, #{expenseType}, #{amount}, #{description}, #{expenseTime})
+    </insert>
+
+    <update id="update">
+        UPDATE work_record_expense
+        <set>
+            <if test="expenseType != null">expense_type = #{expenseType},</if>
+            <if test="amount != null">amount = #{amount},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="expenseTime != null">expense_time = #{expenseTime},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM work_record_expense WHERE id = #{id}
+    </delete>
+
+</mapper>
