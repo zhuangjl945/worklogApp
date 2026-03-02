@@ -6,6 +6,8 @@
 适合科室/部门级别的工作登记、统计分析和简单的业务协同。
 ## 项目截图
 <img width="1850" height="970" alt="image" src="https://github.com/user-attachments/assets/595078d2-060e-47b2-a6b8-e13c209a92f7" />
+<img width="1900" height="956" alt="image" src="https://github.com/user-attachments/assets/8505accf-d680-4cfa-8896-8b246e17ff2e" />
+
 
 ---
 
