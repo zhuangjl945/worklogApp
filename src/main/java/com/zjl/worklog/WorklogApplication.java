@@ -10,6 +10,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class WorklogApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(WorklogApplication.class, args);
+        SpringApplication1.run(WorklogApplication.class, args);
     }
 }
