@@ -11,7 +11,7 @@ public class SpaFallbackController {
         return "forward:/index.html";
     }
 
-    @RequestMapping("/{path:^(?!api$).*$}/**")
+    @RequestMapping({"/{path:^(?!api$)(?!.*\\..*).*$}", "/{path:^(?!api$)(?!.*\\..*).*$}/**"})
     public String forwardOther() {
         return "forward:/index.html";
     }
