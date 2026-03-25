@@ -181,25 +181,9 @@ function openEditExpense(row) {
     expenseType: row.expenseType,
     amount: row.amount,
     description: row.description,
-    // 回填时先把后端可能返回的 ISO 时间统一成 yyyy-MM-dd HH:mm:ss
-    expenseTime: normalizeDateTimeString(row.expenseTime)
+    expenseTime: row.expenseTime ? new Date(row.expenseTime) : new Date()
   }
   expenseDialogVisible.value = true
-}
-
-function formatDateTime(value) {
-  const d = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-function normalizeDateTimeString(value) {
-  if (!value) return ''
-  const text = String(value).trim()
-  // 统一成后端 LocalDateTime 可解析格式：yyyy-MM-dd HH:mm:ss
-  // 兼容 "2026-03-22T18:11:21" / "2026-03-22 18:11:21.000" / "...Z"
-  return text.replace('T', ' ').replace(/\.\d+$/, '').replace(/Z$/, '')
 }
 
 async function handleSubmitExpense() {
@@ -208,18 +192,11 @@ async function handleSubmitExpense() {
     isSubmittingExpense.value = true
     try {
       const payload = {
-        expenseType: expenseForm.value.expenseType,
-        amount: expenseForm.value.amount,
-        description: expenseForm.value.description,
-        expenseTime: undefined
+        ...expenseForm.value
       }
 
-      const rawExpenseTime = expenseForm.value.expenseTime
-      if (rawExpenseTime) {
-        // 后端 LocalDateTime 需要 yyyy-MM-dd HH:mm:ss
-        payload.expenseTime = rawExpenseTime instanceof Date
-          ? formatDateTime(rawExpenseTime)
-          : normalizeDateTimeString(rawExpenseTime)
+      if (!payload.expenseTime) {
+        delete payload.expenseTime
       }
 
       if (expenseEditMode.value === 'create') {

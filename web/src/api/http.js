@@ -35,21 +35,11 @@ http.interceptors.response.use(
         const redirect = encodeURIComponent(location.pathname + location.search)
         window.location.href = `/login?redirect=${redirect}`
       }
-      return Promise.reject(new Error(body.msg || '登录已过期，请重新登录'))
     }
 
     return Promise.reject(new Error(body.msg || '请求失败'))
   },
-  (error) => {
-    if (error?.response?.status === 401) {
-      localStorage.removeItem('access_token')
-      if (!location.pathname.startsWith('/login')) {
-        const redirect = encodeURIComponent(location.pathname + location.search)
-        window.location.href = `/login?redirect=${redirect}`
-      }
-    }
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
 export default http
