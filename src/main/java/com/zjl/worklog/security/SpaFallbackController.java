@@ -6,13 +6,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Controller
 public class SpaFallbackController {
 
-    @RequestMapping({"/", "/login"})
-    public String forwardRoot() {
-        return "forward:/index.html";
-    }
-
-    @RequestMapping("/{path:^(?!api$).*$}/**")
-    public String forwardOther() {
+    @RequestMapping({"/", "/login", "/{path:[^\\.]*}", "/**/{path:[^\\.]*}"})
+    public String forwardSpa() {
         return "forward:/index.html";
     }
 }
