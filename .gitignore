@@ -1,0 +1,26 @@
+# Maven / Java build outputs
+/target/
+*.class
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Frontend
+/web/node_modules/
+/web/dist/
+/web/.vite/
+
+# Env files
+.env
+.env.*
+!.env.example
