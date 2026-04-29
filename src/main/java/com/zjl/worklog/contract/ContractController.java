@@ -164,11 +164,11 @@ public class ContractController {
         contractMainMapper.updateStatus(id, 30, getCurrentUser().getId());
 
         // 解析 paymentSchedule 生成付款计划
+        List<ContractPaymentPlanEntity> plans = new ArrayList<>();
         if (contract.getPaymentSchedule() != null && !contract.getPaymentSchedule().isBlank()) {
             try {
                 List<PaymentPlanItem> items = objectMapper.readValue(contract.getPaymentSchedule(), new TypeReference<>() {});
                 if (!items.isEmpty()) {
-                    List<ContractPaymentPlanEntity> plans = new ArrayList<>();
                     for (PaymentPlanItem item : items) {
                         ContractPaymentPlanEntity p = new ContractPaymentPlanEntity();
                         p.setContractId(id);
@@ -179,11 +179,26 @@ public class ContractController {
                         p.setStatus(10); // 待处理
                         plans.add(p);
                     }
-                    contractPaymentPlanMapper.insertBatch(plans);
                 }
             } catch (Exception e) {
                 throw new BizException(50000, "合同付款计划解析失败");
             }
+        }
+        
+        // 一次性付款（paymentTerms=1）且无付款计划时，自动生成一条
+        if (plans.isEmpty() && contract.getPaymentTerms() != null && contract.getPaymentTerms() == 1) {
+            ContractPaymentPlanEntity p = new ContractPaymentPlanEntity();
+            p.setContractId(id);
+            p.setPlanNo("01");
+            p.setPlanType(contract.getContractDirection());
+            p.setPlanAmount(contract.getContractAmount());
+            p.setPlanDate(contract.getEndDate()); // 默认以合同结束日期为计划付款日
+            p.setStatus(10); // 待处理
+            plans.add(p);
+        }
+        
+        if (!plans.isEmpty()) {
+            contractPaymentPlanMapper.insertBatch(plans);
         }
 
         return ApiResponse.ok(true);
@@ -317,7 +332,7 @@ public class ContractController {
 
         // 后端二次校验：校验付款计划对应合同的科室权限
         getAndCheckContract(plan.getContractId());
-        
+
         plan.setActualDate(req.getActualDate());
         plan.setActualAmount(req.getActualAmount());
         plan.setVoucherNo(req.getVoucherNo());
@@ -328,6 +343,35 @@ public class ContractController {
 
         contractPaymentPlanMapper.updateRecord(plan);
         return ApiResponse.ok(true);
+    }
+
+    @Transactional
+    @PostMapping("/contract/{contractId}/payment-plan")
+    public ApiResponse<Long> addPaymentPlan(@PathVariable Long contractId, @Valid @RequestBody AddPaymentPlanRequest req) {
+        ContractMainEntity contract = getAndCheckContract(contractId);
+        // 允许执行中(30)或已过期(60)的合同添加付款计划
+        if (contract.getStatus() != 30 && contract.getStatus() != 60) {
+            throw new BizException(40001, "仅执行中或已过期合同可添加付款计划");
+        }
+
+        // 校验计划金额合计不能大于合同总金额
+        BigDecimal currentPlanSum = contractPaymentPlanMapper.sumPlanAmountByContractId(contractId);
+        if (currentPlanSum.add(req.getPlanAmount()).compareTo(contract.getContractAmount()) > 0) {
+            throw new BizException(40001, String.format("付款计划合计金额(%.2f)不能大于合同总金额(%.2f)",
+                    currentPlanSum.add(req.getPlanAmount()), contract.getContractAmount()));
+        }
+
+        ContractPaymentPlanEntity plan = new ContractPaymentPlanEntity();
+        plan.setContractId(contractId);
+        plan.setPlanNo(req.getPlanNo());
+        plan.setPlanType(contract.getContractDirection());
+        plan.setPlanAmount(req.getPlanAmount());
+        plan.setPlanDate(req.getPlanDate());
+        plan.setStatus(10); // 待处理
+        plan.setCreatedTime(LocalDateTime.now());
+
+        contractPaymentPlanMapper.insert(plan);
+        return ApiResponse.ok(plan.getId());
     }
 
     // --- 私有辅助方法 ---
@@ -463,5 +507,15 @@ public class ContractController {
         private String voucherNo;
         private String payMethod;
         private String remark;
+    }
+
+    @Data
+    public static class AddPaymentPlanRequest {
+        @NotBlank(message = "阶段名称不能为空")
+        private String planNo;
+        @NotNull(message = "计划金额不能为空")
+        private BigDecimal planAmount;
+        @NotNull(message = "计划日期不能为空")
+        private LocalDate planDate;
     }
 }

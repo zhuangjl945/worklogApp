@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zjl.worklog.work.mapper.WorkRecordTransferMapper">
+
+    <resultMap id="WorkRecordTransferMap" type="com.zjl.worklog.work.entity.WorkRecordTransfer">
+        <id column="id" property="id"/>
+        <result column="work_record_id" property="workRecordId"/>
+        <result column="from_user_id" property="fromUserId"/>
+        <result column="to_user_id" property="toUserId"/>
+        <result column="status" property="status"/>
+        <result column="reason" property="reason"/>
+        <result column="reply" property="reply"/>
+        <result column="create_time" property="createTime"/>
+        <result column="handle_time" property="handleTime"/>
+    </resultMap>
+
+    <sql id="BaseColumns">
+        id, work_record_id, from_user_id, to_user_id, status, reason, reply, create_time, handle_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO work_record_transfer (work_record_id, from_user_id, to_user_id, status, reason)
+        VALUES (#{workRecordId}, #{fromUserId}, #{toUserId}, #{status}, #{reason})
+    </insert>
+
+    <select id="selectById" resultMap="WorkRecordTransferMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record_transfer
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectPendingByRecordId" resultMap="WorkRecordTransferMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record_transfer
+        WHERE work_record_id = #{workRecordId} AND status = 0
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectPendingByToUserId" resultMap="WorkRecordTransferMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record_transfer
+        WHERE to_user_id = #{toUserId} AND status = 0
+        ORDER BY create_time DESC, id DESC
+        <if test="limit != null">LIMIT #{limit}</if>
+    </select>
+
+    <select id="countPendingByToUserId" resultType="long">
+        SELECT COUNT(1)
+        FROM work_record_transfer
+        WHERE to_user_id = #{toUserId} AND status = 0
+    </select>
+
+    <select id="selectByFromUserId" resultMap="WorkRecordTransferMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record_transfer
+        WHERE from_user_id = #{fromUserId}
+        ORDER BY create_time DESC, id DESC
+        <if test="limit != null">LIMIT #{limit}</if>
+    </select>
+
+    <update id="updateStatus">
+        UPDATE work_record_transfer
+        SET status = #{toStatus},
+            reply = #{reply},
+            handle_time = NOW()
+        WHERE id = #{id}
+          <if test="toUserId != null">AND to_user_id = #{toUserId}</if>
+          <if test="fromUserId != null">AND from_user_id = #{fromUserId}</if>
+          <if test="fromStatus != null">AND status = #{fromStatus}</if>
+    </update>
+
+</mapper>

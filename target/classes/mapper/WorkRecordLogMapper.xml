@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zjl.worklog.work.mapper.WorkRecordLogMapper">
+
+    <resultMap id="WorkRecordLogMap" type="com.zjl.worklog.work.entity.WorkRecordLog">
+        <id column="id" property="id"/>
+        <result column="work_record_id" property="workRecordId"/>
+        <result column="user_id" property="userId"/>
+        <result column="log_content" property="logContent"/>
+        <result column="log_time" property="logTime"/>
+    </resultMap>
+
+    <select id="selectByWorkRecordId" resultMap="WorkRecordLogMap">
+        SELECT id, work_record_id, user_id, log_content, log_time
+        FROM work_record_log
+        WHERE work_record_id = #{workRecordId}
+        ORDER BY log_time DESC
+    </select>
+
+    <select id="selectById" resultMap="WorkRecordLogMap">
+        SELECT id, work_record_id, user_id, log_content, log_time
+        FROM work_record_log
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO work_record_log (work_record_id, user_id, log_content)
+        VALUES (#{workRecordId}, #{userId}, #{logContent})
+    </insert>
+
+    <update id="update">
+        UPDATE work_record_log
+        SET log_content = #{logContent}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM work_record_log WHERE id = #{id}
+    </delete>
+
+</mapper>

@@ -59,3 +59,7 @@ export async function paymentPlanRecord(id, payload) {
 export async function paymentPlanUpdate(id, payload) {
   return await http.put(`/payment-plan/${id}`, payload)
 }
+
+export async function contractAddPaymentPlan(contractId, payload) {
+  return await http.post(`/contract/${contractId}/payment-plan`, payload)
+}

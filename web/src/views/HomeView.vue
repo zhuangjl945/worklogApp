@@ -1,7 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
+<<<<<<< HEAD
 import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand } from '@element-plus/icons-vue'
+=======
+import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close } from '@element-plus/icons-vue'
+>>>>>>> dev
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { me } from '../api/auth'
 import { workRecordTransferAccept, workRecordTransferPending, workRecordTransferReject } from '../api/work'
@@ -12,10 +16,24 @@ const route = useRoute()
 const loading = ref(true)
 const errorMsg = ref('')
 const user = ref(null)
+const isSiderCollapsed = ref(localStorage.getItem('siderCollapsed') === 'true')
+
+// Tab 管理系统
+const tabs = ref([
+  { path: '/home', label: '首页', closable: false }
+])
+const activeTab = ref('/home')
+
+function toggleSider() {
+  isSiderCollapsed.value = !isSiderCollapsed.value
+  localStorage.setItem('siderCollapsed', isSiderCollapsed.value)
+}
 
 const displayName = computed(() => user.value?.realName || user.value?.username || '用户')
 const siderCollapsed = ref(false)
 
+// 菜单项映射，用于获取标签名称
+const menuLabelMap = {}
 const menuItems = [
   { path: '/home', label: '首页', icon: HomeFilled },
   { path: '/work-records', label: '工作记录', icon: EditPen },
@@ -44,6 +62,47 @@ const menuItems = [
     ]
   }
 ]
+
+// 扁平化菜单并构建映射
+function flattenMenu(items, parentLabel = '') {
+  items.forEach(item => {
+    if (item.children) {
+      flattenMenu(item.children, item.label)
+    } else {
+      menuLabelMap[item.path] = item.label
+    }
+  })
+}
+flattenMenu(menuItems)
+
+function switchTab(path) {
+  activeTab.value = path
+  router.push(path)
+}
+
+function closeTab(path, event) {
+  event.stopPropagation()
+  const index = tabs.value.findIndex(t => t.path === path)
+  if (index > -1) {
+    tabs.value.splice(index, 1)
+    if (activeTab.value === path) {
+      const newActive = tabs.value[Math.max(0, index - 1)]
+      if (newActive) {
+        activeTab.value = newActive.path
+        router.push(newActive.path)
+      }
+    }
+  }
+}
+
+// 监听路由变化，打开新 Tab
+router.afterEach((to) => {
+  if (!tabs.value.find(t => t.path === to.path)) {
+    const label = menuLabelMap[to.path] || to.path
+    tabs.value.push({ path: to.path, label, closable: to.path !== '/home' })
+  }
+  activeTab.value = to.path
+})
 
 async function loadMe() {
   loading.value = true
@@ -127,6 +186,9 @@ onUnmounted(() => {
   <div class="layout">
     <header class="topbar">
       <div class="topLeft">
+        <el-button text @click="toggleSider" class="collapseBtn">
+          <el-icon size="20"><component :is="isSiderCollapsed ? Expand : Fold" /></el-icon>
+        </el-button>
         <div class="brand">Worklog</div>
         <div class="subtitle">工作日志管理系统</div>
       </div>
@@ -168,6 +230,7 @@ onUnmounted(() => {
       </div>
     </header>
 
+<<<<<<< HEAD
     <div class="body" :class="{ collapsed: siderCollapsed }">
       <aside class="sider" :class="{ collapsed: siderCollapsed }">
         <button class="siderFloatToggle" type="button" @click="siderCollapsed = !siderCollapsed">
@@ -175,18 +238,30 @@ onUnmounted(() => {
         </button>
 
         <div class="siderHeader" v-show="!siderCollapsed">
+=======
+    <div class="body">
+      <aside class="sider" :class="{ collapsed: isSiderCollapsed }">
+        <div class="siderHeader" :class="{ collapsed: isSiderCollapsed }">
+>>>>>>> dev
           <div class="siderTitle">功能导航</div>
         </div>
 
         <el-menu
           :default-active="route.path"
           class="menu"
+<<<<<<< HEAD
           router
           :collapse="siderCollapsed"
           :collapse-transition="true"
+=======
+          :collapse="isSiderCollapsed"
+          :collapse-transition="false"
+          :router="false"
+>>>>>>> dev
           background-color="transparent"
-          text-color="rgba(255, 255, 255, 0.88)"
-          active-text-color="#fff"
+          text-color="rgba(255, 255, 255, 0.85)"
+          active-text-color="#ffffff"
+          @select="(path) => switchTab(path)"
         >
           <template v-for="item in menuItems" :key="item.path || item.label">
             <el-sub-menu v-if="item.children" :index="item.label">
@@ -208,13 +283,29 @@ onUnmounted(() => {
           </template>
         </el-menu>
 
-        <div class="siderFooter">
+        <div class="siderFooter" :class="{ collapsed: isSiderCollapsed }">
           <div class="footLine" />
-          <div class="footText">登录用户：{{ displayName }}</div>
+          <div class="footText" v-if="!isSiderCollapsed">登录用户：{{ displayName }}</div>
         </div>
       </aside>
 
       <main class="main">
+        <!-- Tab 标签栏 -->
+        <div class="tabBar">
+          <div class="tabs">
+            <div
+              v-for="tab in tabs"
+              :key="tab.path"
+              class="tab"
+              :class="{ active: activeTab === tab.path }"
+              @click="switchTab(tab.path)"
+            >
+              <span class="tabLabel">{{ tab.label }}</span>
+              <el-icon v-if="tab.closable" class="tabClose" @click="closeTab(tab.path, $event)"><Close /></el-icon>
+            </div>
+          </div>
+        </div>
+
         <div class="main-container">
           <RouterView v-slot="{ Component }">
             <component :is="Component" :user="user" :loading="loading" :errorMsg="errorMsg" />
@@ -253,6 +344,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+<<<<<<< HEAD
 .siderToggleBtn {
   height: 34px;
   border-radius: 10px;
@@ -278,6 +370,15 @@ onUnmounted(() => {
 .siderToggleIcon {
   margin-right: 6px;
   font-size: 14px;
+=======
+.collapseBtn {
+  padding: 4px;
+  margin-right: 4px;
+}
+
+.collapseBtn:hover {
+  background: #f1f5f9;
+>>>>>>> dev
 }
 
 .brand {
@@ -410,12 +511,16 @@ onUnmounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
+<<<<<<< HEAD
   grid-template-columns: 240px 1fr;
   transition: grid-template-columns 0.25s ease;
 }
 
 .body.collapsed {
   grid-template-columns: 72px 1fr;
+=======
+  grid-template-columns: auto 1fr;
+>>>>>>> dev
 }
 
 .sider {
@@ -432,6 +537,7 @@ onUnmounted(() => {
   box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.15), 8px 0 30px rgba(15, 23, 42, 0.25);
   padding: 14px 0;
   overflow-y: auto;
+<<<<<<< HEAD
   overflow-x: visible;
   color: rgba(255, 255, 255, 0.90);
   transition: width 0.25s ease, box-shadow 0.25s ease;
@@ -473,14 +579,37 @@ onUnmounted(() => {
 
 .sider.collapsed .siderFloatToggle:hover {
   transform: scale(1.06);
+=======
+  overflow-x: hidden;
+  color: #ffffff;
+  transition: width 0.3s ease;
+  width: 200px;
+}
+
+.sider.collapsed {
+  width: 64px;
+>>>>>>> dev
 }
 
 .siderHeader {
   padding: 8px 24px 12px;
 }
 
+.siderHeader.collapsed {
+  padding: 8px;
+  text-align: center;
+}
+
 .siderTitle {
   font-weight: 900;
+  color: #ffffff;
+  transition: opacity 0.3s ease;
+}
+
+.sider.collapsed .siderTitle {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 .menu {
@@ -488,16 +617,35 @@ onUnmounted(() => {
   border-right: none;
 }
 
+.menu:not(.el-menu--collapse) {
+  width: 200px;
+}
+
+.menu :deep(.el-menu-item),
+.menu :deep(.el-sub-menu__title) {
+  color: rgba(255, 255, 255, 0.85);
+}
+
 .menu :deep(.el-sub-menu__title:hover),
 .menu :deep(.el-menu-item:hover) {
+<<<<<<< HEAD
   background-color: rgba(186, 230, 253, 0.12) !important;
 }
 
 .menu :deep(.el-menu-item.is-active) {
   background: linear-gradient(90deg, rgba(56, 189, 248, 0.24), rgba(14, 165, 233, 0.08)) !important;
   border-right: 3px solid #7dd3fc;
+=======
+  background-color: rgba(255, 255, 255, 0.12) !important;
   color: #ffffff !important;
-  font-weight: 800;
+}
+
+.menu :deep(.el-menu-item.is-active) {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  border-right: 3px solid #60a5fa;
+>>>>>>> dev
+  color: #ffffff !important;
+  font-weight: 600;
 }
 
 .menu :deep(.el-menu-item.is-active .el-icon),
@@ -507,11 +655,70 @@ onUnmounted(() => {
 
 .menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
   color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .menu :deep(.el-sub-menu.is-active > .el-sub-menu__title .el-icon),
 .menu :deep(.el-sub-menu.is-active > .el-sub-menu__title span) {
   color: #ffffff !important;
+}
+
+.menu :deep(.el-sub-menu__arrow) {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.menu :deep(.el-menu--inline) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.menu :deep(.el-menu--collapse .el-menu--inline) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.menu :deep(.el-sub-menu__content) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+/* 弹出菜单样式（折叠状态下） */
+.menu :deep(.el-sub-menu .el-menu) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.menu :deep(.el-menu--popup) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.menu :deep(.el-menu--popup .el-menu-item) {
+  color: #ffffff !important;
+  background-color: transparent !important;
+  min-width: 160px;
+}
+
+.menu :deep(.el-menu--popup .el-menu-item:hover) {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.menu :deep(.el-menu--popup .el-menu-item.is-active) {
+  background-color: rgba(59, 130, 246, 0.4) !important;
+  color: #ffffff !important;
+}
+
+.menu :deep(.el-menu--inline .el-menu-item) {
+  padding-left: 48px !important;
+  color: #ffffff !important;
+}
+
+.menu :deep(.el-menu--inline .el-menu-item:hover) {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.menu :deep(.el-menu--inline .el-menu-item.is-active) {
+  background-color: rgba(59, 130, 246, 0.4) !important;
+  border-right: 3px solid #60a5fa;
+  color: #ffffff !important;
+  font-weight: 600;
 }
 
 .menuIcon {
@@ -550,6 +757,12 @@ onUnmounted(() => {
 .siderFooter {
   margin-top: 14px;
   padding: 10px 24px 0;
+  transition: all 0.3s ease;
+}
+
+.siderFooter.collapsed {
+  padding: 10px 8px;
+  text-align: center;
 }
 
 .sider.collapsed .siderFooter {
@@ -564,20 +777,96 @@ onUnmounted(() => {
 
 .footText {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.60);
+  color: rgba(255, 255, 255, 0.6);
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.sider.collapsed .footText {
+  opacity: 0;
 }
 
 .main {
-  overflow: auto;
+  overflow: hidden;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabBar {
+  height: 44px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-bottom: 1px solid #e9edf5;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #f5f7fb;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  border-bottom: none;
+}
+
+.tab:hover {
+  background: #eef2f7;
+  color: #334155;
+}
+
+.tab.active {
+  background: #f0f4ff;
+  color: #1a73e8;
+  font-weight: 500;
+  border-color: #e0e7ff;
+}
+
+.tabClose {
+  font-size: 12px;
+  padding: 2px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.tabClose:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .main-container {
+<<<<<<< HEAD
   width: 100%;
   max-width: none;
   margin: 0;
   padding: 6px 10px;
   box-sizing: border-box;
+=======
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  width: 100%;
+  max-width: 100%;
+>>>>>>> dev
 }
 
 @media (max-width: 900px) {
@@ -586,8 +875,7 @@ onUnmounted(() => {
   }
 
   .sider {
-    border-right: 0;
-    border-bottom: 1px solid #e9edf5;
+    display: none;
   }
 }
 
