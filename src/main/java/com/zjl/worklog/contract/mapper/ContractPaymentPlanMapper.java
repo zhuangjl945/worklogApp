@@ -23,9 +23,13 @@ public interface ContractPaymentPlanMapper {
 
     BigDecimal sumActualAmountByContractId(@Param("contractId") Long contractId);
 
+    BigDecimal sumPlanAmountByContractId(@Param("contractId") Long contractId);
+
     int markOverdueBefore(@Param("date") LocalDate date);
 
     List<com.zjl.worklog.contract.entity.ContractPaymentPlanEntity> selectExpiring(@Param("days") int days, @Param("status") Integer status);
 
     List<com.zjl.worklog.contract.entity.ContractPaymentPlanEntity> selectExpiringWithDept(@Param("days") int days, @Param("status") Integer status, @Param("deptId") Long deptId);
+
+    void insert(ContractPaymentPlanEntity entity);
 }

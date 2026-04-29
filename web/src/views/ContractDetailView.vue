@@ -3,8 +3,8 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tickets } from '@element-plus/icons-vue'
-import { contractDetail, contractStart, paymentPlanRecord, paymentPlanUpdate, contractUpdateAttachments, contractRenew } from '../api/contract'
+import { Tickets, Plus } from '@element-plus/icons-vue'
+import { contractDetail, contractStart, paymentPlanRecord, paymentPlanUpdate, contractUpdateAttachments, contractRenew, contractAddPaymentPlan } from '../api/contract'
 
 const router = useRouter()
 
@@ -99,6 +99,22 @@ const payForm = reactive({
   remark: ''
 })
 
+// 添加付款计划相关
+const addPlanDialogVisible = ref(false)
+const addPlanFormRef = ref()
+const addPlanFormLoading = ref(false)
+const addPlanForm = reactive({
+  planNo: '',
+  planAmount: 0,
+  planDate: ''
+})
+
+const addPlanRules = {
+  planNo: [{ required: true, message: '请输入阶段名称', trigger: 'blur' }],
+  planAmount: [{ required: true, message: '请输入计划金额', trigger: 'blur' }],
+  planDate: [{ required: true, message: '请选择计划日期', trigger: 'change' }]
+}
+
 function openPayRecord(row, edit = false) {
   currentPlanId.value = row.id
   isEditPay.value = edit
@@ -140,6 +156,32 @@ async function submitPay() {
   } catch (e) {
     ElMessage.error(e?.message || '操作失败')
   }
+}
+
+// 打开添加付款计划弹窗
+function openAddPlan() {
+  addPlanForm.planNo = `第${paymentPlans.value.length + 1}期`
+  addPlanForm.planAmount = 0
+  addPlanForm.planDate = ''
+  addPlanDialogVisible.value = true
+}
+
+// 提交添加付款计划
+async function submitAddPlan() {
+  await addPlanFormRef.value?.validate?.(async (valid) => {
+    if (!valid) return
+    addPlanFormLoading.value = true
+    try {
+      await contractAddPaymentPlan(id, addPlanForm)
+      ElMessage.success('添加成功')
+      addPlanDialogVisible.value = false
+      await load()
+    } catch (e) {
+      ElMessage.error(e?.message || '添加失败')
+    } finally {
+      addPlanFormLoading.value = false
+    }
+  })
 }
 
 // 附件调整相关
@@ -295,7 +337,10 @@ onMounted(async () => {
         <template #header>
           <div class="card-header">
             <span>付款计划与记录</span>
-            <el-tag v-if="contract.status === 10" type="info">启动后可登记付款</el-tag>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <el-tag v-if="contract.status === 10" type="info">启动后可登记付款</el-tag>
+              <el-button v-if="contract.status === 30 || contract.status === 60" type="primary" size="small" link :icon="Plus" @click="openAddPlan">添加计划</el-button>
+            </div>
           </div>
         </template>
         
@@ -393,6 +438,24 @@ onMounted(async () => {
       <template #footer>
         <el-button @click="payDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitPay">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="addPlanDialogVisible" title="添加付款计划" width="480px" destroy-on-close>
+      <el-form ref="addPlanFormRef" :model="addPlanForm" :rules="addPlanRules" label-width="100px">
+        <el-form-item label="阶段名称" prop="planNo">
+          <el-input v-model="addPlanForm.planNo" placeholder="例如：第X期、验收款" />
+        </el-form-item>
+        <el-form-item label="计划金额" prop="planAmount">
+          <el-input-number v-model="addPlanForm.planAmount" :precision="2" :min="0" style="width: 100%" placeholder="请输入计划金额" />
+        </el-form-item>
+        <el-form-item label="计划日期" prop="planDate">
+          <el-date-picker v-model="addPlanForm.planDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" placeholder="选择计划日期" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addPlanDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="addPlanFormLoading" @click="submitAddPlan">确定</el-button>
       </template>
     </el-dialog>
   </div>

@@ -10,6 +10,7 @@ com\zjl\worklog\security\JwtProps.class
 com\zjl\worklog\dept\DeptController$UpdateStatusRequest.class
 com\zjl\worklog\work\entity\WorkRecordTransfer.class
 com\zjl\worklog\work\dto\WorkRecordDTO.class
+com\zjl\worklog\contract\ContractController$AddPaymentPlanRequest.class
 com\zjl\worklog\security\CurrentUser.class
 com\zjl\worklog\contract\entity\ContractPaymentPlanEntity.class
 com\zjl\worklog\work\mapper\WorkRecordExpenseMapper.class

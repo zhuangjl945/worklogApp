@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { Tickets, Plus, Delete } from '@element-plus/icons-vue'
 import { contractCreate, contractDetail, contractUpdate } from '../api/contract'
 import { me } from '../api/auth'
-import { supplierPage } from '../api/supplier'
+import { supplierPage, supplierCreate, supplierNextCode } from '../api/supplier'
 import { deptTree, deptMyRootChildren } from '../api/dept'
 import { userPage } from '../api/user'
 import { ossPolicy, ossDeleteObject } from '../api/work'
@@ -41,6 +41,26 @@ const form = reactive({
   contractFileUrl: ''
 })
 
+// 添加供应商弹窗
+const supplierDialogVisible = ref(false)
+const supplierFormRef = ref()
+const supplierFormLoading = ref(false)
+const supplierForm = reactive({
+  supplierCode: '',
+  supplierName: '',
+  supplierShortName: '',
+  creditCode: '',
+  contactPhone: '',
+  bankName: '',
+  bankAccount: '',
+  accountName: ''
+})
+
+const supplierRules = {
+  supplierCode: [{ required: true, message: '请输入供应商编码', trigger: 'blur' }],
+  supplierName: [{ required: true, message: '请输入供应商全称', trigger: 'blur' }]
+}
+
 const rules = {
   contractNo: [{ required: true, message: '请输入合同编号', trigger: 'blur' }],
   contractName: [{ required: true, message: '请输入合同名称', trigger: 'blur' }],
@@ -60,6 +80,50 @@ async function loadSuppliers(query) {
     const resp = await supplierPage({ supplierName: query, size: 20, deleted: 0 })
     suppliers.value = resp.data.records
   } catch (e) {}
+}
+
+// 打开添加供应商弹窗
+async function openAddSupplier() {
+  supplierForm.supplierName = ''
+  supplierForm.supplierShortName = ''
+  supplierForm.creditCode = ''
+  supplierForm.contactPhone = ''
+  supplierForm.bankName = ''
+  supplierForm.bankAccount = ''
+  supplierForm.accountName = ''
+  supplierDialogVisible.value = true
+  // 获取自动编码
+  await loadSupplierNextCode()
+}
+
+// 获取供应商自动编码
+async function loadSupplierNextCode() {
+  try {
+    const resp = await supplierNextCode()
+    supplierForm.supplierCode = resp.data.supplierCode
+  } catch (e) {}
+}
+
+// 提交新增供应商
+async function submitSupplier() {
+  await supplierFormRef.value?.validate?.(async (valid) => {
+    if (!valid) return
+    supplierFormLoading.value = true
+    try {
+      const resp = await supplierCreate(supplierForm)
+      ElMessage.success('供应商创建成功')
+      supplierDialogVisible.value = false
+      // 自动选中新创建的供应商
+      form.supplierId = resp.data.id
+      form.supplierName = supplierForm.supplierName
+      // 刷新供应商列表
+      loadSuppliers(supplierForm.supplierName)
+    } catch (e) {
+      ElMessage.error(e?.message || '创建供应商失败')
+    } finally {
+      supplierFormLoading.value = false
+    }
+  })
 }
 
 async function loadDepts() {
@@ -300,6 +364,7 @@ onMounted(async () => {
   }
 
   loadManagers()
+  loadSupplierNextCode()
 
   if (!isEdit && myDeptId.value != null && form.deptId == null) {
     form.deptId = myDeptId.value
@@ -341,9 +406,14 @@ onMounted(async () => {
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="供应商" v-if="form.contractDirection === 1">
-              <el-select v-model="form.supplierId" filterable remote :remote-method="loadSuppliers" @change="onSupplierChange" style="width: 100%" placeholder="搜素供应商">
-                <el-option v-for="s in suppliers" :key="s.id" :label="s.supplierName" :value="s.id" />
-              </el-select>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <el-select v-model="form.supplierId" filterable remote :remote-method="loadSuppliers" @change="onSupplierChange" style="flex: 1;" placeholder="搜素供应商">
+                  <el-option v-for="s in suppliers" :key="s.id" :label="s.supplierName" :value="s.id" />
+                </el-select>
+                <el-button type="primary" plain size="small" @click="openAddSupplier" title="新增供应商">
+                  <el-icon><Plus /></el-icon>
+                </el-button>
+              </div>
             </el-form-item>
             <el-form-item label="客户名称" v-else>
               <el-input v-model="form.customerName" placeholder="输入客户名称" />
@@ -486,6 +556,41 @@ onMounted(async () => {
         </el-button>
       </div>
     </el-card>
+
+    <!-- 添加供应商弹窗 -->
+    <el-dialog v-model="supplierDialogVisible" title="新增供应商" width="560px" destroy-on-close>
+      <el-form ref="supplierFormRef" :model="supplierForm" :rules="supplierRules" label-width="110px" style="max-width: 480px;">
+        <el-form-item label="供应商编码" prop="supplierCode">
+          <el-input v-model="supplierForm.supplierCode" placeholder="系统自动生成" />
+        </el-form-item>
+        <el-form-item label="供应商全称" prop="supplierName">
+          <el-input v-model="supplierForm.supplierName" placeholder="请输入供应商全称" />
+        </el-form-item>
+        <el-form-item label="供应商简称">
+          <el-input v-model="supplierForm.supplierShortName" placeholder="请输入供应商简称" />
+        </el-form-item>
+        <el-form-item label="统一信用代码">
+          <el-input v-model="supplierForm.creditCode" placeholder="请输入统一信用代码" />
+        </el-form-item>
+        <el-form-item label="联系电话">
+          <el-input v-model="supplierForm.contactPhone" placeholder="请输入联系电话" />
+        </el-form-item>
+        <el-divider content-position="left" style="margin: 16px 0;">银行账户信息</el-divider>
+        <el-form-item label="开户银行">
+          <el-input v-model="supplierForm.bankName" placeholder="请输入开户银行" />
+        </el-form-item>
+        <el-form-item label="银行账号" label-width="110px">
+          <el-input v-model="supplierForm.bankAccount" placeholder="请输入银行账号" />
+        </el-form-item>
+        <el-form-item label="账户名称" label-width="110px">
+          <el-input v-model="supplierForm.accountName" placeholder="请输入账户名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="supplierDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="supplierFormLoading" @click="submitSupplier">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

@@ -44,6 +44,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleException(Exception e) {
-        return ApiResponse.fail(50000, "系统异常");
+        return ApiResponse.fail(50000, "系统异常: " + e.getMessage());
     }
 }
