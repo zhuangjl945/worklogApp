@@ -75,6 +75,7 @@ public class WorkCategoryController {
         entity.setCategoryCode(req.getCategoryCode());
         entity.setCategoryName(req.getCategoryName());
         entity.setDescription(req.getDescription());
+        entity.setTemplateJson(blankToNull(req.getTemplateJson()));
         entity.setStatus(req.getStatus() == null ? 1 : req.getStatus());
 
         categoryMapper.insert(entity);
@@ -94,6 +95,9 @@ public class WorkCategoryController {
         update.setDeptId(deptId);
         update.setCategoryName(req.getCategoryName());
         update.setDescription(req.getDescription());
+        if (req.getTemplateJson() != null) {
+            update.setTemplateJson(req.getTemplateJson());
+        }
         update.setStatus(req.getStatus());
         categoryMapper.update(update);
         return ApiResponse.ok(true);
@@ -110,12 +114,18 @@ public class WorkCategoryController {
         return ApiResponse.ok(true);
     }
 
+    private static String blankToNull(String s) {
+        if (s == null || s.isBlank()) return null;
+        return s;
+    }
+
     public static class CreateCategoryRequest {
         @NotBlank
         private String categoryCode;
         @NotBlank
         private String categoryName;
         private String description;
+        private String templateJson;
         private Integer status;
 
         public String getCategoryCode() {
@@ -142,6 +152,14 @@ public class WorkCategoryController {
             this.description = description;
         }
 
+        public String getTemplateJson() {
+            return templateJson;
+        }
+
+        public void setTemplateJson(String templateJson) {
+            this.templateJson = templateJson;
+        }
+
         public Integer getStatus() {
             return status;
         }
@@ -155,6 +173,7 @@ public class WorkCategoryController {
         @NotBlank
         private String categoryName;
         private String description;
+        private String templateJson;
         private Integer status;
 
         public String getCategoryName() {
@@ -171,6 +190,14 @@ public class WorkCategoryController {
 
         public void setDescription(String description) {
             this.description = description;
+        }
+
+        public String getTemplateJson() {
+            return templateJson;
+        }
+
+        public void setTemplateJson(String templateJson) {
+            this.templateJson = templateJson;
         }
 
         public Integer getStatus() {

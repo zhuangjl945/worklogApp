@@ -133,3 +133,7 @@ ADD COLUMN biz_dept_id BIGINT NULL COMMENT '业务科室ID（记录选择）';
 ALTER TABLE work_record
 ADD COLUMN image_urls TEXT NULL COMMENT '图片URL列表(建议存JSON数组字符串)'
 AFTER content;
+
+-- 工作分类新建模板
+ALTER TABLE work_category
+ADD COLUMN template_json TEXT NULL COMMENT '新建记录模板JSON' AFTER description;

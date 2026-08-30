@@ -29,13 +29,13 @@ http.interceptors.response.use(
       return body
     }
 
-   /*  if (body.code === 401) {
+    if (body.code === 401) {
       localStorage.removeItem('access_token')
       if (!location.pathname.startsWith('/login')) {
         const redirect = encodeURIComponent(location.pathname + location.search)
         window.location.href = `/login?redirect=${redirect}`
       }
-    } */
+    }
 
     return Promise.reject(new Error(body.msg || '请求失败'))
   },

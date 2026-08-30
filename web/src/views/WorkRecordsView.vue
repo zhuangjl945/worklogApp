@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { Plus, Search, Refresh, Connection, Document, Delete } from '@element-plus/icons-vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { Plus, Search, Refresh, Connection, Document, Delete, Notebook } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   workCategoryEnabled,
@@ -10,13 +11,20 @@ import {
   workRecordUpdate,
   workRecordUpdateStatus,
   workRecordTransferCreate,
+  workRecordWeeklyReport,
   workStatusEnabled,
-  ossPolicy,
   ossDeleteObject
 } from '../api/work'
 import { userPage } from '../api/user'
 import { deptAllEnabled, deptMyRootChildren } from '../api/dept'
 import WorkRecordDetailDrawer from './WorkRecordDetailDrawer.vue'
+import { uploadToOss } from '../utils/oss'
+import {
+  fillTemplatePattern,
+  parseCategoryTemplate,
+  templateDateLabel,
+  validateAgainstTemplate
+} from '../utils/categoryTemplate.js'
 
 const props = defineProps({
   user: {
@@ -25,9 +33,13 @@ const props = defineProps({
   }
 })
 
+const route = useRoute()
 const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
+const focusedRowId = ref(null)
+const lastAppliedTitle = ref('')
+const lastAppliedContent = ref('')
 
 const categoryOptions = ref([])
 const statusOptions = ref([])
@@ -52,6 +64,51 @@ const deptMap = computed(() => {
   return m
 })
 
+function currentTemplate() {
+  const cat = categoryOptions.value.find((c) => c.id === form.categoryId)
+  return parseCategoryTemplate(cat?.templateJson)
+}
+
+function templateContext() {
+  const cat = categoryOptions.value.find((c) => c.id === form.categoryId)
+  const biz = form.bizDeptId != null ? deptMap.value.get(String(form.bizDeptId)) : ''
+  return {
+    date: templateDateLabel(form.startTime),
+    bizDept: biz || '',
+    category: cat?.categoryName || ''
+  }
+}
+
+function applyCategoryTemplate(forceContent = false) {
+  const tpl = currentTemplate()
+  if (!tpl) return
+  const ctx = templateContext()
+  const nextTitle = fillTemplatePattern(tpl.titlePattern, ctx)
+  const nextContent = tpl.contentTemplate || ''
+  if (nextTitle && (!form.title || form.title === lastAppliedTitle.value)) {
+    form.title = nextTitle
+    lastAppliedTitle.value = nextTitle
+  }
+  if (nextContent && (forceContent || !form.content || form.content === lastAppliedContent.value)) {
+    form.content = nextContent
+    lastAppliedContent.value = nextContent
+  }
+}
+
+function onCategoryChange() {
+  if (editMode.value === 'create') {
+    lastAppliedTitle.value = ''
+    lastAppliedContent.value = ''
+    applyCategoryTemplate(true)
+    return
+  }
+  applyCategoryTemplate(false)
+}
+
+function onBizDeptOrStartChange() {
+  applyCategoryTemplate(false)
+}
+
 const filters = reactive({
   page: 1,
   size: 10,
@@ -59,7 +116,9 @@ const filters = reactive({
   bizDeptId: null,
   statusIds: [1, 2],
   createTimeRange: null,
-  title: ''
+  title: '',
+  overdue: false,
+  importantOnly: false
 })
 
 function normalizeCreateTimeRange(v) {
@@ -85,7 +144,9 @@ function buildQueryParams() {
     categoryIds: filters.categoryIds.length > 0 ? filters.categoryIds.join(',') : undefined,
     bizDeptId: filters.bizDeptId ?? undefined,
     statusIds: filters.statusIds.length > 0 ? filters.statusIds.join(',') : undefined,
-    title: filters.title?.trim() ? `%${filters.title.trim()}%` : undefined
+    title: filters.title?.trim() ? `%${filters.title.trim()}%` : undefined,
+    overdue: filters.overdue ? true : undefined,
+    isImportant: filters.importantOnly ? 1 : undefined
   }
 
   if (filters.createTimeRange && filters.createTimeRange.length === 2) {
@@ -119,6 +180,7 @@ async function load() {
     const resp = await workRecordPage(buildQueryParams())
     tableData.value = resp.data.records
     total.value = resp.data.total
+    await applyFocusFromRoute()
   } catch (e) {
     ElMessage.error(e?.message || '加载工作记录失败')
   } finally {
@@ -138,6 +200,8 @@ function onReset() {
   filters.statusIds = []
   filters.createTimeRange = null
   filters.title = ''
+  filters.overdue = false
+  filters.importantOnly = false
   load()
 }
 
@@ -161,6 +225,75 @@ function toggleStatusFilter(id, checked) {
     filters.statusIds = filters.statusIds.filter((i) => i !== id)
   }
   onSearch()
+}
+
+function toDateTimeValue(v) {
+  if (!v) return null
+  if (Array.isArray(v) && v.length >= 3) {
+    const [y, m, d, h = 0, min = 0, s = 0] = v
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${y}-${pad(m)}-${pad(d)} ${pad(h)}:${pad(min)}:${pad(s)}`
+  }
+  const s = String(v).replace('T', ' ')
+  if (s.length >= 19) return s.slice(0, 19)
+  if (s.length >= 16) return `${s.slice(0, 16)}:00`
+  return s
+}
+
+function nowDateTimeValue() {
+  return formatDateTime(Date.now())
+}
+
+function isOpenStatus(statusId) {
+  return statusId === 1 || statusId === 2
+}
+
+function isOverdue(row) {
+  if (!row?.endTime || !isOpenStatus(row.statusId)) return false
+  const raw = toDateTimeValue(row.endTime)
+  if (!raw) return false
+  const t = new Date(raw.replace(' ', 'T'))
+  return Number.isFinite(t.getTime()) && t.getTime() < Date.now()
+}
+
+function deadlineRel(row) {
+  const raw = toDateTimeValue(row?.endTime)
+  if (!raw) return ''
+  const d = new Date(raw.slice(0, 10) + 'T00:00:00')
+  if (!Number.isFinite(d.getTime())) return ''
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
+  if (diff < 0) return `已过 ${Math.abs(diff)} 天`
+  if (diff === 0) return '今天'
+  if (diff === 1) return '明天'
+  return `${diff} 天后`
+}
+
+function formatDeadline(row) {
+  const raw = toDateTimeValue(row?.endTime)
+  if (!raw) return '未定期'
+  const rel = deadlineRel(row)
+  return rel ? `${raw.slice(5, 16)} · ${rel}` : raw.slice(5, 16)
+}
+
+function tableRowClassName({ row }) {
+  const classes = []
+  if (isOverdue(row)) classes.push('is-overdue')
+  if (focusedRowId.value != null && String(row.id) === String(focusedRowId.value)) classes.push('is-focused')
+  return classes.join(' ')
+}
+
+async function applyFocusFromRoute() {
+  const id = route.query.focusId
+  if (!id) {
+    focusedRowId.value = null
+    return
+  }
+  focusedRowId.value = id
+  await nextTick()
+  const el = document.querySelector('.modern-table .is-focused')
+  el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
 }
 
 function getStatusTagType(statusId) {
@@ -211,6 +344,7 @@ function getRowImageUrls(row) {
 }
 
 const dialogs = reactive({ edit: false })
+const showInlineCreate = ref(false)
 const editMode = ref('create')
 const currentId = ref(null)
 const formRef = ref()
@@ -269,6 +403,8 @@ const form = reactive({
   title: '',
   content: '',
   imageUrls: '',
+  startTime: null,
+  endTime: null,
   isImportant: 0
 })
 
@@ -424,6 +560,7 @@ function handleRowClick(row, column) {
 }
 
 function openCreate() {
+  if (showInlineCreate.value) { showInlineCreate.value = false; return }
   editMode.value = 'create'
   currentId.value = null
   form.bizDeptId = null
@@ -432,12 +569,28 @@ function openCreate() {
   form.title = ''
   form.content = ''
   form.imageUrls = ''
+  form.startTime = nowDateTimeValue()
+  form.endTime = null
   form.isImportant = 0
+  lastAppliedTitle.value = ''
+  lastAppliedContent.value = ''
   originalImageUrls.value = []
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
   originalImageUrls.value = parseUrls(form.imageUrls)
-  dialogs.edit = true
+  showInlineCreate.value = true
+}
+
+function cancelInlineCreate() {
+  const currentUrls = contentImageUrls.value
+  const addedUrls = currentUrls.filter((u) => !originalImageUrls.value.includes(u))
+  for (const url of addedUrls) {
+    const key = urlToOssKey(url)
+    if (key) { try { ossDeleteObject({ key }) } catch (e) { /* 静默 */ } }
+  }
+  showInlineCreate.value = false
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = ""
 }
 
 function openEdit(row) {
@@ -449,6 +602,8 @@ function openEdit(row) {
   form.title = row.title
   form.content = row.content
   form.imageUrls = row.imageUrls || ''
+  form.startTime = toDateTimeValue(row.startTime)
+  form.endTime = toDateTimeValue(row.endTime)
   form.isImportant = row.isImportant ?? 0
 
   // 迁移逻辑：如果 content 里有图但 imageUrls 没存，自动提取并清理 content
@@ -477,16 +632,30 @@ function openEdit(row) {
 async function submit() {
   await formRef.value?.validate?.(async (valid) => {
     if (!valid) return
+    if (form.startTime && form.endTime && form.startTime > form.endTime) {
+      ElMessage.error('截止日期不能早于开始时间')
+      return
+    }
+    const tplErrors = validateAgainstTemplate(currentTemplate(), form)
+    if (tplErrors.length) {
+      ElMessage.warning(tplErrors[0])
+      return
+    }
+    const payload = {
+      ...form,
+      startTime: form.startTime || null,
+      endTime: form.endTime || null
+    }
     try {
       if (editMode.value === 'create') {
-        await workRecordCreate(form)
+        await workRecordCreate(payload)
         ElMessage.success('创建成功')
       } else {
-        await workRecordUpdate(currentId.value, form)
+        await workRecordUpdate(currentId.value, payload)
         ElMessage.success('更新成功')
       }
       originalImageUrls.value = parseUrls(form.imageUrls)
-      dialogs.edit = false
+      if (editMode.value === "create") { showInlineCreate.value = false } else { dialogs.edit = false }
       if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
       previewUrl.value = ''
       await load()
@@ -512,21 +681,7 @@ async function uploadImageFile(file) {
 
   uploading.value = true
   try {
-    const policyResp = await ossPolicy({ dir: 'work-records' })
-    const p = policyResp.data
-
-    const fd = new FormData()
-    fd.append('key', p.key)
-    fd.append('policy', p.policy)
-    fd.append('OSSAccessKeyId', p.accessKeyId)
-    fd.append('signature', p.signature)
-    fd.append('success_action_status', '200')
-    fd.append('file', file)
-
-    const resp = await fetch(p.host, { method: 'POST', body: fd })
-    if (!resp.ok) throw new Error('上传 OSS 失败')
-
-    const imgUrl = p.url || `${p.host}/${p.key}`
+    const imgUrl = await uploadToOss(file, 'work-records')
 
     let urls = []
     if (form.imageUrls) {
@@ -603,6 +758,66 @@ async function remove(row) {
   }
 }
 
+const weeklyDialog = reactive({
+  visible: false,
+  loading: false,
+  week: 'this',
+  text: '',
+  from: '',
+  to: ''
+})
+
+async function openWeeklyReport() {
+  weeklyDialog.visible = true
+  await loadWeeklyReport()
+}
+
+async function loadWeeklyReport() {
+  weeklyDialog.loading = true
+  try {
+    const resp = await workRecordWeeklyReport({ week: weeklyDialog.week })
+    weeklyDialog.text = resp.data?.text || ''
+    weeklyDialog.from = resp.data?.from || ''
+    weeklyDialog.to = resp.data?.to || ''
+  } catch (e) {
+    ElMessage.error(e?.message || '生成周报失败')
+  } finally {
+    weeklyDialog.loading = false
+  }
+}
+
+async function copyWeeklyReport() {
+  const text = weeklyDialog.text
+  if (!text) {
+    ElMessage.warning('没有可复制的内容')
+    return
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success('已复制，可粘贴到微信/OA')
+  } catch (e) {
+    ElMessage.error(e?.message || '复制失败，请手动全选复制')
+  }
+}
+
+watch(
+  () => route.query.focusId,
+  () => {
+    applyFocusFromRoute()
+  }
+)
+
 onMounted(async () => {
   await loadOptions()
   await load()
@@ -636,7 +851,11 @@ onMounted(async () => {
                 <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.categoryName" />
               </el-select>
             </el-form-item>
-
+            <div class="filter-row">
+            <el-form-item label="标题">
+              <el-input v-model="filters.title" placeholder="标题（模糊匹配）" clearable style="width: 200px" @keyup.enter="onSearch" />
+            </el-form-item>
+          </div>
             <el-form-item label="状态">
               <el-select v-model="filters.statusIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部" style="width: 200px" @change="onSearch">
                 <el-option v-for="s in statusOptions" :key="s.id" :value="s.id" :label="s.statusName" />
@@ -656,25 +875,132 @@ onMounted(async () => {
               />
             </el-form-item>
 
+            <el-form-item>
+              <el-checkbox v-model="filters.overdue" @change="onSearch">仅逾期</el-checkbox>
+              <el-checkbox v-model="filters.importantOnly" @change="onSearch">仅重要</el-checkbox>
+            </el-form-item>
+
             <el-form-item class="action-buttons">
               <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
               <el-button :icon="Refresh" @click="onReset">重置</el-button>
             </el-form-item>
           </div>
 
-          <div class="filter-row">
-            <el-form-item label="标题">
-              <el-input v-model="filters.title" placeholder="标题（模糊匹配）" clearable style="width: 450px" @keyup.enter="onSearch" />
-            </el-form-item>
-          </div>
+       
         </el-form>
       </div>
 
-      <div class="table-actions" style="margin-bottom: 16px;">
-        <el-button type="primary" :icon="Plus" @click="openCreate">新增记录</el-button>
+      <div class="table-actions" style="margin-bottom: 16px; display: flex; gap: 8px;">
+        <el-button type="primary" :icon="Plus" @click="openCreate" :class="{ 'is-active': showInlineCreate }">
+          {{ showInlineCreate ? '收起表单' : '新增记录' }}
+        </el-button>
+        <el-button :icon="Notebook" @click="openWeeklyReport">生成本周周报</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="tableData" class="modern-table" @row-click="handleRowClick">
+      <!-- 内联展开卡片 - 新增记录 -->
+      <Transition name="inline-card">
+        <div v-if="showInlineCreate" class="inline-create-card">
+          <div class="inline-card-header">
+            <div class="inline-card-title">
+              <el-icon class="inline-card-icon"><Plus /></el-icon>
+              <span>新增工作记录</span>
+            </div>
+            <div class="inline-card-actions">
+              <el-button @click="cancelInlineCreate">取消</el-button>
+              <el-button type="primary" :loading="uploading" @click="submit">提交</el-button>
+            </div>
+          </div>
+
+          <div class="inline-card-body">
+            <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="small" class="inline-form">
+              <div class="inline-form-grid">
+                <el-form-item label="业务科室">
+                  <el-select v-model="form.bizDeptId" clearable filterable placeholder="可选" style="width: 100%" @change="onBizDeptOrStartChange">
+                    <el-option :value="null" label="不指定" />
+                    <el-option v-for="d in deptOptions" :key="d.id" :value="d.id" :label="`${d.deptName} (${d.deptCode})`" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="分类" prop="categoryId">
+                  <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%" @change="onCategoryChange">
+                    <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.categoryName" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="状态">
+                  <el-select v-model="form.statusId" placeholder="请选择状态" style="width: 100%">
+                    <el-option v-for="s in statusOptions" :key="s.id" :value="s.id" :label="s.statusName" />
+                  </el-select>
+                </el-form-item>
+              </div>
+
+              <div class="inline-form-grid">
+                <el-form-item label="开始时间">
+                  <el-date-picker
+                    v-model="form.startTime"
+                    type="datetime"
+                    placeholder="可选"
+                    value-format="YYYY-MM-DD HH:mm:ss"
+                    format="YYYY-MM-DD HH:mm"
+                    style="width: 100%"
+                    @change="onBizDeptOrStartChange"
+                  />
+                </el-form-item>
+                <el-form-item label="截止日期">
+                  <el-date-picker
+                    v-model="form.endTime"
+                    type="datetime"
+                    placeholder="建议填写，用于逾期提醒"
+                    value-format="YYYY-MM-DD HH:mm:ss"
+                    format="YYYY-MM-DD HH:mm"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </div>
+
+              <el-form-item label="标题" prop="title">
+                <el-input v-model="form.title" placeholder="请输入标题" />
+              </el-form-item>
+
+              <el-form-item label="内容（支持粘贴图片，最多5张，最大2M）">
+                <el-input v-model="form.content" type="textarea" :rows="4" placeholder="可选" @paste="onPaste" />
+              </el-form-item>
+
+              <el-form-item>
+                <div class="inline-extras">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <el-upload :auto-upload="false" :show-file-list="false" accept="image/*" :on-change="onPickImage">
+                      <el-button size="small" :loading="uploading" :disabled="uploading">上传图片</el-button>
+                    </el-upload>
+                    <div class="inline-important">
+                      <span class="inline-label" style="margin-bottom: 0;">重要</span>
+                      <el-switch v-model="form.isImportant" :active-value="1" :inactive-value="0" />
+                    </div>
+                  </div>
+
+                  <div v-if="previewUrl" class="inline-preview">
+                    <el-image :src="previewUrl" style="width: 80px; height: 80px; border-radius: 8px;" fit="cover" />
+                  </div>
+
+                  <div v-if="contentImageUrls.length > 0" class="inline-images">
+                    <div v-for="u in contentImageUrls" :key="u" class="inline-image-item">
+                      <el-image :src="u" style="width: 64px; height: 64px; border-radius: 8px;" fit="cover" :preview-src-list="contentImageUrls" :initial-index="contentImageUrls.indexOf(u)" preview-teleported />
+                      <el-button circle type="danger" :icon="Delete" size="small" class="inline-image-delete" @click.stop="deleteImage(u)" />
+                    </div>
+                  </div>
+                </div>
+              </el-form-item>
+            </el-form>
+          </div>
+        </div>
+      </Transition>
+
+      <el-table
+        v-loading="loading"
+        :data="tableData"
+        class="modern-table"
+        row-key="id"
+        :row-class-name="tableRowClassName"
+        @row-click="handleRowClick"
+      >
         <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tooltip :content="row.content || '暂无详细内容'" placement="top" :disabled="!row.content" :show-after="200">
@@ -727,6 +1053,12 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
+        <el-table-column label="截止" width="168">
+          <template #default="{ row }">
+            <span class="deadline" :class="{ overdue: isOverdue(row) }">{{ formatDeadline(row) }}</span>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="createTime" label="创建时间" width="180" />
 
         <el-table-column label="操作" width="280" fixed="right">
@@ -751,7 +1083,7 @@ onMounted(async () => {
       />
     </el-card>
 
-    <el-dialog
+    <el-dialog v-if="editMode === 'edit'"
       v-model="dialogs.edit"
       :title="editMode === 'create' ? '新增工作记录' : '编辑工作记录'"
       width="780px"
@@ -761,14 +1093,14 @@ onMounted(async () => {
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="small" class="compact-form">
         <el-form-item label="业务科室">
-          <el-select v-model="form.bizDeptId" clearable filterable placeholder="可选" style="width: 100%">
+          <el-select v-model="form.bizDeptId" clearable filterable placeholder="可选" style="width: 100%" @change="onBizDeptOrStartChange">
             <el-option :value="null" label="不指定" />
             <el-option v-for="d in deptOptions" :key="d.id" :value="d.id" :label="`${d.deptName} (${d.deptCode})`" />
           </el-select>
         </el-form-item>
 
         <el-form-item label="分类" prop="categoryId">
-          <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
+          <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%" @change="onCategoryChange">
             <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.categoryName" />
           </el-select>
         </el-form-item>
@@ -778,6 +1110,30 @@ onMounted(async () => {
             <el-option v-for="s in statusOptions" :key="s.id" :value="s.id" :label="s.statusName" />
           </el-select>
         </el-form-item>
+
+        <div style="display: flex; gap: 16px;">
+          <el-form-item label="开始时间" style="flex: 1;">
+            <el-date-picker
+              v-model="form.startTime"
+              type="datetime"
+              placeholder="可选"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              format="YYYY-MM-DD HH:mm"
+              style="width: 100%"
+              @change="onBizDeptOrStartChange"
+            />
+          </el-form-item>
+          <el-form-item label="截止日期" style="flex: 1;">
+            <el-date-picker
+              v-model="form.endTime"
+              type="datetime"
+              placeholder="建议填写，用于逾期提醒"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              format="YYYY-MM-DD HH:mm"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </div>
 
         <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" placeholder="请输入标题" />
@@ -853,6 +1209,26 @@ onMounted(async () => {
     </el-dialog>
 
     <WorkRecordDetailDrawer v-model:visible="detailDrawer.visible" :record-id="detailDrawer.recordId" />
+
+    <el-dialog v-model="weeklyDialog.visible" title="工作周报" width="560px">
+      <div class="weekly-toolbar">
+        <el-radio-group v-model="weeklyDialog.week" @change="loadWeeklyReport">
+          <el-radio-button value="this">本周</el-radio-button>
+          <el-radio-button value="last">上周</el-radio-button>
+        </el-radio-group>
+        <span v-if="weeklyDialog.from" class="weekly-range">{{ weeklyDialog.from }} 至 {{ weeklyDialog.to }}</span>
+      </div>
+      <el-input
+        v-model="weeklyDialog.text"
+        type="textarea"
+        :rows="18"
+        class="weekly-text"
+      />
+      <template #footer>
+        <el-button @click="weeklyDialog.visible = false">关闭</el-button>
+        <el-button type="primary" :loading="weeklyDialog.loading" @click="copyWeeklyReport">复制到微信/OA</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -966,6 +1342,25 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
+.modern-table :deep(.el-table__row.is-overdue > td.el-table__cell) {
+  background: #fef2f2;
+}
+
+.modern-table :deep(.el-table__row.is-focused > td.el-table__cell) {
+  background: #fff7ed;
+  box-shadow: inset 3px 0 0 #c23a2b;
+}
+
+.deadline {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.deadline.overdue {
+  color: #c23a2b;
+  font-weight: 700;
+}
+
 .modern-table :deep(.el-table__cell) {
   padding-top: 6px;
   padding-bottom: 6px;
@@ -996,4 +1391,165 @@ onMounted(async () => {
   padding-bottom: 10px;
 }
 
+
+/* ========================================
+   内联新增卡片 - 展开式表单
+   ======================================== */
+.inline-create-card {
+  margin-bottom: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.inline-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+}
+
+.inline-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.inline-card-icon {
+  font-size: 16px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+
+.inline-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.inline-card-body {
+  padding: 20px;
+}
+
+.inline-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.inline-label .required {
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.inline-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inline-important {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-preview {
+  margin-top: 4px;
+}
+
+.inline-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.inline-image-item {
+  position: relative;
+}
+
+.inline-image-delete {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* 展开/收起动画 */
+.inline-card-enter-active {
+  animation: inlineCardIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.inline-card-leave-active {
+  animation: inlineCardIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) reverse;
+}
+
+@keyframes inlineCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 900px;
+  }
+}
+
+/* 新增按钮激活态 */
+.table-actions .is-active {
+  background: #64748b !important;
+  border-color: #64748b !important;
+}
+
+.weekly-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.weekly-range {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.weekly-text :deep(textarea) {
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .inline-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

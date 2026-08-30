@@ -8,6 +8,7 @@ import {
   workCategoryUpdate,
   workCategoryDelete
 } from '../api/work'
+import { CATEGORY_TEMPLATE_PRESETS, parseCategoryTemplate, stringifyCategoryTemplate } from '../utils/categoryTemplate.js'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -32,7 +33,12 @@ const form = reactive({
   categoryCode: '',
   categoryName: '',
   description: '',
-  status: 1
+  status: 1,
+  titlePattern: '',
+  contentTemplate: '',
+  requireContent: false,
+  requireEndTime: false,
+  requireImage: false
 })
 
 const rules = {
@@ -80,6 +86,49 @@ function onReset() {
   fetchPage()
 }
 
+function resetTemplateFields() {
+  form.titlePattern = ''
+  form.contentTemplate = ''
+  form.requireContent = false
+  form.requireEndTime = false
+  form.requireImage = false
+}
+
+function applyTemplateToForm(json) {
+  const tpl = parseCategoryTemplate(json)
+  if (!tpl) {
+    resetTemplateFields()
+    return
+  }
+  form.titlePattern = tpl.titlePattern
+  form.contentTemplate = tpl.contentTemplate
+  form.requireContent = tpl.requireContent
+  form.requireEndTime = tpl.requireEndTime
+  form.requireImage = tpl.requireImage
+}
+
+function applyPreset(preset) {
+  form.titlePattern = preset.titlePattern
+  form.contentTemplate = preset.contentTemplate
+  form.requireContent = preset.requireContent
+  form.requireEndTime = preset.requireEndTime
+  form.requireImage = preset.requireImage
+}
+
+function templatePayload() {
+  return stringifyCategoryTemplate({
+    titlePattern: form.titlePattern,
+    contentTemplate: form.contentTemplate,
+    requireContent: form.requireContent,
+    requireEndTime: form.requireEndTime,
+    requireImage: form.requireImage
+  })
+}
+
+function hasTemplate(row) {
+  return !!parseCategoryTemplate(row?.templateJson)
+}
+
 function openCreate() {
   dialogMode.value = 'create'
   form.id = null
@@ -87,6 +136,7 @@ function openCreate() {
   form.categoryName = ''
   form.description = ''
   form.status = 1
+  resetTemplateFields()
   dialogVisible.value = true
 }
 
@@ -97,6 +147,7 @@ function openEdit(row) {
   form.categoryName = row.categoryName
   form.description = row.description
   form.status = row.status
+  applyTemplateToForm(row.templateJson)
   dialogVisible.value = true
 }
 
@@ -109,6 +160,7 @@ async function onSubmit() {
         categoryCode: form.categoryCode,
         categoryName: form.categoryName,
         description: form.description,
+        templateJson: templatePayload(),
         status: form.status
       })
       ElMessage.success('新增成功')
@@ -116,6 +168,7 @@ async function onSubmit() {
       await workCategoryUpdate(form.id, {
         categoryName: form.categoryName,
         description: form.description,
+        templateJson: templatePayload(),
         status: form.status
       })
       ElMessage.success('保存成功')
@@ -212,7 +265,13 @@ onMounted(fetchPage)
         <el-table :data="pageData.records" v-loading="loading" border stripe row-key="id">
           <el-table-column prop="categoryCode" label="分类编码" min-width="140" />
           <el-table-column prop="categoryName" label="分类名称" min-width="180" />
-          <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
+          <el-table-column label="模板" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="hasTemplate(row)" type="success" size="small">已配置</el-tag>
+              <span v-else style="color: #94a3b8;">—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="status" label="状态" width="100">
             <template #default="{ row }">
               <el-switch
@@ -250,8 +309,8 @@ onMounted(fetchPage)
       </el-card>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px" destroy-on-close>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="640px" destroy-on-close>
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="分类编码" prop="categoryCode">
           <el-input v-model="form.categoryCode" placeholder="如：DEV_TASK" :disabled="dialogMode !== 'create'" />
         </el-form-item>
@@ -259,7 +318,26 @@ onMounted(fetchPage)
           <el-input v-model="form.categoryName" placeholder="如：开发任务" />
         </el-form-item>
         <el-form-item label="说明">
-          <el-input v-model="form.description" type="textarea" :rows="3" placeholder="可选" />
+          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="套用预设">
+          <div class="preset-row">
+            <el-button v-for="p in CATEGORY_TEMPLATE_PRESETS" :key="p.key" size="small" @click="applyPreset(p)">
+              {{ p.label }}
+            </el-button>
+            <el-button size="small" text type="danger" @click="resetTemplateFields">清空模板</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="标题结构">
+          <el-input v-model="form.titlePattern" placeholder="如：报修-{业务科室}-{现象}，可用 {日期} {业务科室} {分类}" />
+        </el-form-item>
+        <el-form-item label="内容骨架">
+          <el-input v-model="form.contentTemplate" type="textarea" :rows="5" placeholder="新建时预填到内容框，引导把关键信息写全" />
+        </el-form-item>
+        <el-form-item label="必填项">
+          <el-checkbox v-model="form.requireContent">必须填写内容</el-checkbox>
+          <el-checkbox v-model="form.requireEndTime">必须填写截止日期</el-checkbox>
+          <el-checkbox v-model="form.requireImage">必须上传图片</el-checkbox>
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="form.status">
@@ -330,5 +408,12 @@ onMounted(fetchPage)
   margin-top: 14px;
   display: flex;
   justify-content: flex-end;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 </style>

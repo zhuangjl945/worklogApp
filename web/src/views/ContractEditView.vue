@@ -8,7 +8,9 @@ import { me } from '../api/auth'
 import { supplierPage, supplierCreate, supplierNextCode } from '../api/supplier'
 import { deptTree, deptMyRootChildren } from '../api/dept'
 import { userPage } from '../api/user'
-import { ossPolicy, ossDeleteObject } from '../api/work'
+import { ossDeleteObject } from '../api/work'
+import { parseFileUrlList, uploadToOss } from '../utils/oss'
+import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -235,15 +237,12 @@ function onSupplierChange(val) {
 const uploadLoading = ref(false)
 const pendingFiles = ref([])
 
-const existingFiles = computed(() => {
-  if (!form.contractFileUrl) return []
-  try {
-    const parsed = JSON.parse(form.contractFileUrl)
-    return Array.isArray(parsed) ? parsed : [form.contractFileUrl]
-  } catch (e) {
-    return [form.contractFileUrl]
-  }
-})
+const existingFiles = computed(() => parseFileUrlList(form.contractFileUrl))
+
+const previewRef = ref()
+function previewFile(url) {
+  previewRef.value?.open(url)
+}
 
 function handleFileChange(file) {
   const f = file?.raw || file
@@ -282,25 +281,7 @@ async function uploadPendingFilesToOss() {
   const urls = []
   try {
     for (const f of pendingFiles.value) {
-      const policyResp = await ossPolicy({ dir: 'contracts' })
-      const p = policyResp.data
-
-      const formData = new FormData()
-      formData.append('key', p.key)
-      formData.append('policy', p.policy)
-      formData.append('OSSAccessKeyId', p.accessKeyId)
-      formData.append('signature', p.signature)
-      formData.append('file', f)
-
-      const resp = await fetch(p.host, {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!resp.ok) {
-        throw new Error(`文件 ${f.name} 上传失败`)
-      }
-      urls.push(p.url)
+      urls.push(await uploadToOss(f, 'contracts'))
     }
     pendingFiles.value = []
     return urls
@@ -494,7 +475,7 @@ onMounted(async () => {
             <el-icon><Tickets /></el-icon>
             <div style="flex: 1">
               <div v-for="(u, idx) in existingFiles" :key="idx" style="display: flex; align-items: center; gap: 8px; margin: 2px 0">
-                <el-link :href="u" target="_blank" rel="noopener" type="primary">已上传附件{{ existingFiles.length > 1 ? idx + 1 : '' }}</el-link>
+                <el-link type="primary" @click.prevent="previewFile(u)">已上传附件{{ existingFiles.length > 1 ? idx + 1 : '' }}</el-link>
                 <el-button link type="danger" size="small" @click="removeExistingFile(u)">移除</el-button>
               </div>
             </div>
@@ -591,6 +572,7 @@ onMounted(async () => {
         <el-button type="primary" :loading="supplierFormLoading" @click="submitSupplier">确定</el-button>
       </template>
     </el-dialog>
+    <FilePreviewDialog ref="previewRef" />
   </div>
 </template>
 

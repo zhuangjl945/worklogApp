@@ -33,7 +33,9 @@ async function doRenew() {
   }
 }
 import { me } from '../api/auth'
-import { ossPolicy, ossDeleteObject } from '../api/work'
+import { ossDeleteObject } from '../api/work'
+import { parseFileUrlList, uploadToOss } from '../utils/oss'
+import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 
 const route = useRoute()
 const id = route.params.id
@@ -189,15 +191,12 @@ const attachDialogVisible = ref(false)
 const uploadLoading = ref(false)
 const pendingFiles = ref([])
 
-const existingFiles = computed(() => {
-  if (!contract.value?.contractFileUrl) return []
-  try {
-    const parsed = JSON.parse(contract.value.contractFileUrl)
-    return Array.isArray(parsed) ? parsed : [contract.value.contractFileUrl]
-  } catch (e) {
-    return [contract.value.contractFileUrl]
-  }
-})
+const existingFiles = computed(() => parseFileUrlList(contract.value?.contractFileUrl))
+
+const previewRef = ref()
+function previewFile(url) {
+  previewRef.value?.open(url)
+}
 
 function handleFileChange(file) {
   const f = file?.raw || file
@@ -245,18 +244,7 @@ async function submitAttachments() {
   try {
     const newUrls = []
     for (const f of pendingFiles.value) {
-      const policyResp = await ossPolicy({ dir: 'contracts' })
-      const p = policyResp.data
-      const formData = new FormData()
-      formData.append('key', p.key)
-      formData.append('policy', p.policy)
-      formData.append('OSSAccessKeyId', p.accessKeyId)
-      formData.append('signature', p.signature)
-      formData.append('file', f)
-
-      const resp = await fetch(p.host, { method: 'POST', body: formData })
-      if (!resp.ok) throw new Error(`文件 ${f.name} 上传失败`)
-      newUrls.push(p.url)
+      newUrls.push(await uploadToOss(f, 'contracts'))
     }
 
     const allUrls = [...existingFiles.value, ...newUrls]
@@ -323,9 +311,11 @@ onMounted(async () => {
           </el-descriptions-item>
           <el-descriptions-item label="负责人ID">{{ contract.managerId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="合同附件">
-            <template v-if="contract.contractFileUrl">
-              <div v-for="(u, idx) in (() => { try { const p = JSON.parse(contract.contractFileUrl); return Array.isArray(p) ? p : [contract.contractFileUrl] } catch { return [contract.contractFileUrl] } })()" :key="idx" style="margin: 2px 0">
-                <el-link :href="u" target="_blank" rel="noopener" type="primary">查看附件{{ (() => { try { const p = JSON.parse(contract.contractFileUrl); return Array.isArray(p) && p.length > 1 } catch { return false } })() ? idx + 1 : '' }}</el-link>
+            <template v-if="existingFiles.length">
+              <div v-for="(u, idx) in existingFiles" :key="idx" style="margin: 2px 0">
+                <el-link type="primary" @click.prevent="previewFile(u)">
+                  在线浏览{{ existingFiles.length > 1 ? idx + 1 : '' }}
+                </el-link>
               </div>
             </template>
             <span v-else>-</span>
@@ -378,7 +368,7 @@ onMounted(async () => {
           <div class="section-title">现有附件</div>
           <div v-if="existingFiles.length > 0" class="file-list">
             <div v-for="(u, idx) in existingFiles" :key="idx" class="file-item">
-              <el-link :href="u" target="_blank" type="primary">附件 {{ idx + 1 }}</el-link>
+              <el-link type="primary" @click.prevent="previewFile(u)">附件 {{ idx + 1 }}</el-link>
               <el-button link type="danger" size="small" @click="removeExistingFile(u)">移除</el-button>
             </div>
           </div>
@@ -440,6 +430,8 @@ onMounted(async () => {
         <el-button type="primary" @click="submitPay">确定</el-button>
       </template>
     </el-dialog>
+
+    <FilePreviewDialog ref="previewRef" />
 
     <el-dialog v-model="addPlanDialogVisible" title="添加付款计划" width="480px" destroy-on-close>
       <el-form ref="addPlanFormRef" :model="addPlanForm" :rules="addPlanRules" label-width="100px">

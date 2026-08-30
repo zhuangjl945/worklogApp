@@ -3,6 +3,7 @@ package com.zjl.worklog.work.mapper;
 import com.zjl.worklog.work.dto.WorkCategoryStat;
 import com.zjl.worklog.work.dto.WorkCategorySummary;
 import com.zjl.worklog.work.dto.WorkloadUserDeptCategoryStat;
+import com.zjl.worklog.work.dto.WorkWeeklyItem;
 import com.zjl.worklog.work.entity.WorkRecord;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -19,7 +20,10 @@ public interface WorkRecordMapper {
                @Param("statusIds") List<Integer> statusIds,
                @Param("title") String title,
                @Param("createTimeFrom") LocalDateTime createTimeFrom,
-               @Param("createTimeTo") LocalDateTime createTimeTo);
+               @Param("createTimeTo") LocalDateTime createTimeTo,
+               @Param("isImportant") Integer isImportant,
+               @Param("overdue") Boolean overdue,
+               @Param("dueBefore") LocalDateTime dueBefore);
 
     List<WorkRecord> selectPage(@Param("offset") long offset,
                                @Param("size") long size,
@@ -29,7 +33,10 @@ public interface WorkRecordMapper {
                                @Param("statusIds") List<Integer> statusIds,
                                @Param("title") String title,
                                @Param("createTimeFrom") LocalDateTime createTimeFrom,
-                               @Param("createTimeTo") LocalDateTime createTimeTo);
+                               @Param("createTimeTo") LocalDateTime createTimeTo,
+                               @Param("isImportant") Integer isImportant,
+                               @Param("overdue") Boolean overdue,
+                               @Param("dueBefore") LocalDateTime dueBefore);
 
     WorkRecord selectById(@Param("id") Long id,
                           @Param("userId") Long userId);
@@ -58,4 +65,10 @@ public interface WorkRecordMapper {
                       @Param("fromUserId") Long fromUserId,
                       @Param("toUserId") Long toUserId,
                       @Param("toDeptId") Long toDeptId);
+
+    List<WorkWeeklyItem> selectWeeklyDone(@Param("userId") Long userId,
+                                          @Param("from") LocalDateTime from,
+                                          @Param("to") LocalDateTime to);
+
+    List<WorkWeeklyItem> selectOpenWithCategory(@Param("userId") Long userId);
 }

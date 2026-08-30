@@ -1,19 +1,25 @@
 package com.zjl.worklog.work;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.zjl.worklog.common.api.ApiResponse;
 import com.zjl.worklog.common.api.PageResponse;
 import com.zjl.worklog.common.exception.BizException;
 import com.zjl.worklog.security.CurrentUser;
 import com.zjl.worklog.security.UserContext;
+import com.zjl.worklog.work.dto.CategoryTemplate;
 import com.zjl.worklog.work.dto.WorkCategoryStat;
 import com.zjl.worklog.work.dto.WorkCategorySummary;
 import com.zjl.worklog.work.dto.WorkExpenseStat;
 import com.zjl.worklog.work.dto.WorkRecordDTO;
+import com.zjl.worklog.work.dto.WorkWeeklyItem;
+import com.zjl.worklog.work.dto.WorkWeeklyReport;
 import com.zjl.worklog.work.dto.WorkloadUserDeptCategoryStat;
+import com.zjl.worklog.work.entity.WorkCategory;
 import com.zjl.worklog.work.entity.WorkRecord;
 import com.zjl.worklog.work.entity.WorkRecordExpense;
 import com.zjl.worklog.work.entity.WorkRecordLog;
+import com.zjl.worklog.work.mapper.WorkCategoryMapper;
 import com.zjl.worklog.work.mapper.WorkRecordExpenseMapper;
 import com.zjl.worklog.work.mapper.WorkRecordLogMapper;
 import com.zjl.worklog.work.mapper.WorkRecordMapper;
@@ -25,8 +31,12 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +50,16 @@ public class WorkRecordController {
     private final WorkRecordMapper recordMapper;
     private final WorkRecordLogMapper logMapper;
     private final WorkRecordExpenseMapper expenseMapper;
+    private final WorkCategoryMapper categoryMapper;
+    private final ObjectMapper objectMapper;
 
-    public WorkRecordController(WorkRecordMapper recordMapper, WorkRecordLogMapper logMapper, WorkRecordExpenseMapper expenseMapper) {
+    public WorkRecordController(WorkRecordMapper recordMapper, WorkRecordLogMapper logMapper, WorkRecordExpenseMapper expenseMapper,
+                                WorkCategoryMapper categoryMapper, ObjectMapper objectMapper) {
         this.recordMapper = recordMapper;
         this.logMapper = logMapper;
         this.expenseMapper = expenseMapper;
+        this.categoryMapper = categoryMapper;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -56,16 +71,19 @@ public class WorkRecordController {
             @RequestParam(required = false) List<Integer> statusIds,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime createTimeFrom,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime createTimeTo
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime createTimeTo,
+            @RequestParam(required = false) Integer isImportant,
+            @RequestParam(required = false) Boolean overdue,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime dueBefore
     ) {
         CurrentUser cu = requireLogin();
         if (page < 1) page = 1;
         if (size < 1) size = 10;
-        long total = recordMapper.count(cu.getId(), categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo);
+        long total = recordMapper.count(cu.getId(), categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo, isImportant, overdue, dueBefore);
         long offset = (page - 1) * size;
         List<WorkRecord> records = total == 0
                 ? List.of()
-                : recordMapper.selectPage(offset, size, cu.getId(), categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo);
+                : recordMapper.selectPage(offset, size, cu.getId(), categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo, isImportant, overdue, dueBefore);
         var views = records.stream().map(WorkRecordDTO::new).toList();
         return ApiResponse.ok(PageResponse.of(page, size, total, views));
     }
@@ -109,6 +127,51 @@ public class WorkRecordController {
         return ApiResponse.ok(recordMapper.statsUserDeptCategory(endTimeFrom, endTimeTo, deptId, userId));
     }
 
+    @GetMapping("/weekly-report")
+    public ApiResponse<WorkWeeklyReport> weeklyReport(@RequestParam(defaultValue = "this") String week) {
+        CurrentUser cu = requireLogin();
+        boolean last = "last".equalsIgnoreCase(week);
+        LocalDate monday = LocalDate.now().with(DayOfWeek.MONDAY);
+        if (last) {
+            monday = monday.minusWeeks(1);
+        }
+        LocalDate sunday = monday.plusDays(6);
+        LocalDateTime from = monday.atStartOfDay();
+        LocalDateTime to = sunday.atTime(LocalTime.of(23, 59, 59));
+
+        List<WorkWeeklyItem> done = recordMapper.selectWeeklyDone(cu.getId(), from, to);
+        List<WorkWeeklyItem> doing = recordMapper.selectOpenWithCategory(cu.getId());
+        LocalDateTime now = LocalDateTime.now();
+        for (WorkWeeklyItem item : doing) {
+            boolean overdue = item.getEndTime() != null
+                    && item.getEndTime().isBefore(now)
+                    && (item.getStatusId() != null && (item.getStatusId() == 1 || item.getStatusId() == 2));
+            item.setOverdue(overdue);
+        }
+        List<WorkExpenseStat> expenses = expenseMapper.statsByExpenseType(cu.getId(), from, to);
+        BigDecimal total = BigDecimal.ZERO;
+        if (expenses != null) {
+            for (WorkExpenseStat e : expenses) {
+                if (e.getTotalAmount() != null) {
+                    total = total.add(e.getTotalAmount());
+                }
+            }
+        }
+
+        WorkWeeklyReport report = new WorkWeeklyReport();
+        report.setWeek(last ? "last" : "this");
+        DateTimeFormatter df = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        report.setFrom(monday.format(df));
+        report.setTo(sunday.format(df));
+        report.setRealName(cu.getRealName() != null ? cu.getRealName() : cu.getUsername());
+        report.setDone(done == null ? List.of() : done);
+        report.setDoing(doing == null ? List.of() : doing);
+        report.setExpenses(expenses == null ? List.of() : expenses);
+        report.setExpenseTotal(total);
+        report.setText(buildWeeklyText(report, monday, sunday));
+        return ApiResponse.ok(report);
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<WorkRecordDTO> detail(@PathVariable Long id) {
         CurrentUser cu = requireLogin();
@@ -122,6 +185,7 @@ public class WorkRecordController {
     @PostMapping
     public ApiResponse<Map<String, Long>> create(@Valid @RequestBody CreateWorkRecordRequest req) {
         CurrentUser cu = requireLogin();
+        applyCategoryTemplateRules(cu, req.getCategoryId(), req.getContent(), req.getEndTime(), req.getImageUrls());
         WorkRecord entity = new WorkRecord();
         entity.setUserId(cu.getId());
         entity.setDeptId(cu.getDeptId() == null ? 0L : cu.getDeptId());
@@ -147,6 +211,8 @@ public class WorkRecordController {
         if (existed == null) {
             throw new BizException(40001, "记录不存在");
         }
+        applyCategoryTemplateRules(cu, req.getCategoryId() != null ? req.getCategoryId() : existed.getCategoryId(),
+                req.getContent(), req.getEndTime(), req.getImageUrls());
         WorkRecord update = new WorkRecord();
         update.setId(id);
         update.setUserId(cu.getId());
@@ -291,6 +357,102 @@ public class WorkRecordController {
         if (record == null) {
             throw new BizException(40001, "记录不存在或无权访问");
         }
+    }
+
+    private void applyCategoryTemplateRules(CurrentUser cu, Long categoryId, String content, LocalDateTime endTime, String imageUrls) {
+        if (categoryId == null) return;
+        WorkCategory category = categoryMapper.selectById(categoryId, cu.getDeptId());
+        if (category == null || category.getTemplateJson() == null || category.getTemplateJson().isBlank()) {
+            return;
+        }
+        CategoryTemplate tpl;
+        try {
+            tpl = objectMapper.readValue(category.getTemplateJson(), CategoryTemplate.class);
+        } catch (Exception e) {
+            return;
+        }
+        if (tpl == null) return;
+        if (tpl.requireContent() && (content == null || content.isBlank())) {
+            throw new BizException(40001, "该分类要求填写工作内容");
+        }
+        if (tpl.requireEndTime() && endTime == null) {
+            throw new BizException(40001, "该分类要求填写截止日期");
+        }
+        if (tpl.requireImage() && !hasImages(imageUrls)) {
+            throw new BizException(40001, "该分类要求上传至少一张图片");
+        }
+    }
+
+    private boolean hasImages(String imageUrls) {
+        if (imageUrls == null || imageUrls.isBlank() || "[]".equals(imageUrls.trim())) {
+            return false;
+        }
+        String s = imageUrls.trim();
+        if (s.startsWith("[")) {
+            try {
+                List<?> arr = objectMapper.readValue(s, List.class);
+                return arr != null && arr.stream().anyMatch(x -> x != null && !String.valueOf(x).isBlank());
+            } catch (Exception ignored) {
+                return true;
+            }
+        }
+        return s.split(",").length > 0;
+    }
+
+    private String buildWeeklyText(WorkWeeklyReport report, LocalDate monday, LocalDate sunday) {
+        DateTimeFormatter md = DateTimeFormatter.ofPattern("M月d日");
+        StringBuilder sb = new StringBuilder();
+        sb.append("【工作周报】").append(monday.format(md)).append("–").append(sunday.format(md));
+        if (report.getRealName() != null && !report.getRealName().isBlank()) {
+            sb.append("  ").append(report.getRealName());
+        }
+        sb.append("\n\n");
+        sb.append("一、本周完成（").append(report.getDone().size()).append("）\n");
+        appendWeeklyLines(sb, report.getDone(), false);
+        sb.append("\n二、进行中（").append(report.getDoing().size()).append("）\n");
+        appendWeeklyLines(sb, report.getDoing(), true);
+        sb.append("\n三、费用\n");
+        if (report.getExpenses() == null || report.getExpenses().isEmpty()) {
+            sb.append("无\n");
+        } else {
+            for (WorkExpenseStat e : report.getExpenses()) {
+                sb.append(e.getExpenseType() == null ? "其他" : e.getExpenseType())
+                        .append(" ")
+                        .append(formatMoney(e.getTotalAmount()))
+                        .append("  ");
+            }
+            sb.append("合计 ").append(formatMoney(report.getExpenseTotal())).append("\n");
+        }
+        sb.append("\n（系统生成，请酌情删改）");
+        return sb.toString();
+    }
+
+    private void appendWeeklyLines(StringBuilder sb, List<WorkWeeklyItem> items, boolean withDeadline) {
+        if (items == null || items.isEmpty()) {
+            sb.append("无\n");
+            return;
+        }
+        DateTimeFormatter md = DateTimeFormatter.ofPattern("M/d");
+        int i = 1;
+        for (WorkWeeklyItem item : items) {
+            sb.append(i++).append(". ");
+            if (item.getCategoryName() != null && !item.getCategoryName().isBlank()) {
+                sb.append("[").append(item.getCategoryName()).append("] ");
+            }
+            sb.append(item.getTitle() == null ? "未命名" : item.getTitle());
+            if (withDeadline && item.getEndTime() != null) {
+                sb.append("（截止 ").append(item.getEndTime().toLocalDate().format(md)).append("）");
+            }
+            if (Boolean.TRUE.equals(item.getOverdue())) {
+                sb.append(" ※已逾期");
+            }
+            sb.append("\n");
+        }
+    }
+
+    private String formatMoney(BigDecimal n) {
+        if (n == null) return "0";
+        return n.stripTrailingZeros().toPlainString();
     }
 
     private Integer calcDurationMinutes(LocalDateTime start, LocalDateTime end) {

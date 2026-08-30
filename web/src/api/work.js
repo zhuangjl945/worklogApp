@@ -44,6 +44,10 @@ export async function workRecordStatsUserDeptCategory(params) {
   return await http.get('/work/records/stats/report/user-dept-category', { params })
 }
 
+export async function workRecordWeeklyReport(params) {
+  return await http.get('/work/records/weekly-report', { params })
+}
+
 export async function workRecordCreate(payload) {
   return await http.post('/work/records', payload)
 }
@@ -120,6 +124,10 @@ export async function workRecordTransferReject(id, payload) {
 // --- OSS ---
 export async function ossPolicy(params) {
   return await http.get('/oss/policy', { params })
+}
+
+export async function ossPreviewUrl(params) {
+  return await http.get('/oss/preview-url', { params })
 }
 
 export async function ossDeleteObject(params) {

@@ -433,6 +433,7 @@ public class ContractController {
         dest.setContractAmount(src.getContractAmount());
         dest.setStartDate(src.getStartDate());
         dest.setEndDate(src.getEndDate());
+        dest.setIsLongTerm(src.getIsLongTerm());
         dest.setSignDate(src.getSignDate());
         dest.setPaymentTerms(src.getPaymentTerms());
         dest.setContractFileUrl(src.getContractFileUrl());
@@ -470,8 +471,8 @@ public class ContractController {
         private BigDecimal contractAmount;
         @NotNull
         private LocalDate startDate;
-        @NotNull
         private LocalDate endDate;
+        private Boolean isLongTerm;
         private LocalDate signDate;
         private Integer paymentTerms;
         private List<PaymentPlanItem> paymentSchedule;

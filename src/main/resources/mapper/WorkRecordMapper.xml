@@ -73,6 +73,16 @@
             </if>
             <if test="createTimeFrom != null">AND create_time &gt;= #{createTimeFrom}</if>
             <if test="createTimeTo != null">AND create_time &lt;= #{createTimeTo}</if>
+            <if test="isImportant != null">AND is_important = #{isImportant}</if>
+            <if test="overdue != null and overdue">
+                AND end_time IS NOT NULL
+                AND end_time &lt; NOW()
+                AND status_id IN (1, 2)
+            </if>
+            <if test="dueBefore != null">
+                AND end_time IS NOT NULL
+                AND end_time &lt;= #{dueBefore}
+            </if>
         </where>
     </sql>
 
@@ -202,6 +212,37 @@
         SET deleted = 1
         WHERE id = #{id} AND user_id = #{userId} AND deleted = 0
     </update>
+
+    <resultMap id="WorkWeeklyItemMap" type="com.zjl.worklog.work.dto.WorkWeeklyItem">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="status_id" property="statusId"/>
+        <result column="end_time" property="endTime"/>
+        <result column="is_important" property="isImportant"/>
+    </resultMap>
+
+    <select id="selectWeeklyDone" resultMap="WorkWeeklyItemMap">
+        SELECT wr.id, wr.title, wc.category_name, wr.status_id, wr.end_time, wr.is_important
+        FROM work_record wr
+        LEFT JOIN work_category wc ON wr.category_id = wc.id
+        WHERE wr.deleted = 0
+          AND wr.user_id = #{userId}
+          AND wr.status_id = 3
+          AND wr.update_time &gt;= #{from}
+          AND wr.update_time &lt;= #{to}
+        ORDER BY wr.update_time DESC, wr.id DESC
+    </select>
+
+    <select id="selectOpenWithCategory" resultMap="WorkWeeklyItemMap">
+        SELECT wr.id, wr.title, wc.category_name, wr.status_id, wr.end_time, wr.is_important
+        FROM work_record wr
+        LEFT JOIN work_category wc ON wr.category_id = wc.id
+        WHERE wr.deleted = 0
+          AND wr.user_id = #{userId}
+          AND wr.status_id IN (1, 2)
+        ORDER BY wr.is_important DESC, wr.end_time IS NULL ASC, wr.end_time ASC, wr.id DESC
+    </select>
 
     <update id="transferOwner">
         UPDATE work_record

@@ -23,6 +23,7 @@
         <result column="paid_plan_count" property="paidPlanCount"/>
         <result column="start_date" property="startDate"/>
         <result column="end_date" property="endDate"/>
+        <result column="is_long_term" property="isLongTerm"/>
         <result column="sign_date" property="signDate"/>
 
         <result column="status" property="status"/>
@@ -84,7 +85,7 @@
                COALESCE(pp.paid_amount, 0) AS paid_amount,
                COALESCE(pp.total_plan_count, 0) AS total_plan_count,
                COALESCE(pp.paid_plan_count, 0) AS paid_plan_count,
-               t.start_date, t.end_date, t.sign_date,
+               t.start_date, t.end_date, t.is_long_term, t.sign_date,
                t.status, t.payment_terms, t.payment_schedule, t.contract_file_url,
                t.dept_id, t.manager_id, t.renew_from_id, t.renew_count,
                origin.contract_no as renew_from_no,
@@ -107,7 +108,7 @@
     <select id="selectById" resultMap="ContractMainEntityMap">
         SELECT id, contract_no, contract_name, contract_type, contract_direction,
                customer_id, customer_name, supplier_id, supplier_name,
-               contract_amount, start_date, end_date, sign_date,
+               contract_amount, start_date, end_date, is_long_term, sign_date,
                status, payment_terms, payment_schedule, contract_file_url,
                dept_id, manager_id, renew_from_id, renew_count,
                created_by, created_time, updated_by, updated_time, deleted
@@ -119,7 +120,7 @@
     <select id="selectByContractNo" resultMap="ContractMainEntityMap">
         SELECT id, contract_no, contract_name, contract_type, contract_direction,
                customer_id, customer_name, supplier_id, supplier_name,
-               contract_amount, start_date, end_date, sign_date,
+               contract_amount, start_date, end_date, is_long_term, sign_date,
                status, payment_terms, payment_schedule, contract_file_url,
                dept_id, manager_id, renew_from_id, renew_count,
                created_by, created_time, updated_by, updated_time, deleted
@@ -132,14 +133,14 @@
         INSERT INTO contract_main (
             contract_no, contract_name, contract_type, contract_direction,
             customer_id, customer_name, supplier_id, supplier_name,
-            contract_amount, start_date, end_date, sign_date,
+            contract_amount, start_date, end_date, is_long_term, sign_date,
             status, payment_terms, payment_schedule, contract_file_url,
             dept_id, manager_id,
             created_by, updated_by, deleted
         ) VALUES (
             #{contractNo}, #{contractName}, #{contractType}, #{contractDirection},
             #{customerId}, #{customerName}, #{supplierId}, #{supplierName},
-            #{contractAmount}, #{startDate}, #{endDate}, #{signDate},
+            #{contractAmount}, #{startDate}, #{endDate}, #{isLongTerm}, #{signDate},
             #{status}, #{paymentTerms}, #{paymentSchedule}, #{contractFileUrl},
             #{deptId}, #{managerId},
             #{createdBy}, #{updatedBy}, 0
@@ -160,6 +161,7 @@
             <if test="contractAmount != null">contract_amount = #{contractAmount},</if>
             <if test="startDate != null">start_date = #{startDate},</if>
             <if test="endDate != null">end_date = #{endDate},</if>
+            <if test="isLongTerm != null">is_long_term = #{isLongTerm},</if>
             <if test="signDate != null">sign_date = #{signDate},</if>
             <if test="status != null">status = #{status},</if>
             <if test="paymentTerms != null">payment_terms = #{paymentTerms},</if>
@@ -189,7 +191,7 @@
     <select id="selectExpiring" resultMap="ContractMainEntityMap">
         SELECT id, contract_no, contract_name, contract_type, contract_direction,
                customer_id, customer_name, supplier_id, supplier_name,
-               contract_amount, start_date, end_date, sign_date,
+               contract_amount, start_date, end_date, is_long_term, sign_date,
                status, payment_terms, payment_schedule, contract_file_url,
                dept_id, manager_id, renew_from_id, renew_count,
                created_by, created_time, updated_by, updated_time, deleted
@@ -203,7 +205,7 @@
     <select id="selectExpiringWithDept" resultMap="ContractMainEntityMap">
         SELECT id, contract_no, contract_name, contract_type, contract_direction,
                customer_id, customer_name, supplier_id, supplier_name,
-               contract_amount, start_date, end_date, sign_date,
+               contract_amount, start_date, end_date, is_long_term, sign_date,
                status, payment_terms, payment_schedule, contract_file_url,
                dept_id, manager_id, renew_from_id, renew_count,
                created_by, created_time, updated_by, updated_time, deleted

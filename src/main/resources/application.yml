@@ -22,7 +22,7 @@ mybatis:
 
 jwt:
   secret: "change-me-to-a-long-random-secret-at-least-32-bytes"
-  expire-seconds: 7200
+  expire-seconds: 43200
 
 aliyun:
   oss:

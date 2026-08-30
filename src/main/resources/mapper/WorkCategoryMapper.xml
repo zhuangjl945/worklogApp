@@ -8,13 +8,14 @@
         <result column="category_code" property="categoryCode"/>
         <result column="category_name" property="categoryName"/>
         <result column="description" property="description"/>
+        <result column="template_json" property="templateJson"/>
         <result column="status" property="status"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
     <sql id="BaseColumns">
-        id, dept_id, category_code, category_name, description, status, create_time, update_time
+        id, dept_id, category_code, category_name, description, template_json, status, create_time, update_time
     </sql>
 
     <select id="count" resultType="long">
@@ -67,8 +68,8 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO work_category (dept_id, category_code, category_name, description, status)
-        VALUES (#{deptId}, #{categoryCode}, #{categoryName}, #{description}, #{status})
+        INSERT INTO work_category (dept_id, category_code, category_name, description, template_json, status)
+        VALUES (#{deptId}, #{categoryCode}, #{categoryName}, #{description}, #{templateJson}, #{status})
     </insert>
 
     <update id="update">
@@ -76,6 +77,7 @@
         <set>
             <if test="categoryName != null">category_name = #{categoryName},</if>
             <if test="description != null">description = #{description},</if>
+            <if test="templateJson != null">template_json = #{templateJson},</if>
             <if test="status != null">status = #{status},</if>
         </set>
         <where>

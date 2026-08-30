@@ -25,6 +25,7 @@ public class ContractMainEntity {
     private LocalDate startDate;
     private LocalDate endDate;
     private LocalDate signDate;
+    private Boolean isLongTerm; // 是否长期有效
 
     private Integer status; // 10草稿 30执行中 40已完成 50已终止 60已过期
     private Integer paymentTerms; // 1一次性 2分期 3按里程碑 4月结

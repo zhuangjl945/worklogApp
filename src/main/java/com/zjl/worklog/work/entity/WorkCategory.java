@@ -11,6 +11,7 @@ public class WorkCategory {
     private String categoryCode;
     private String categoryName;
     private String description;
+    private String templateJson;
     private Integer status;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

@@ -5,6 +5,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets } from '@element-plus/icons-vue'
 import { contractDelete, contractPage, contractStart, contractComplete, contractTerminate, contractRenew } from '../api/contract'
 import { me } from '../api/auth'
+import { parseFileUrlList } from '../utils/oss'
+import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 
 const router = useRouter()
 
@@ -43,6 +45,14 @@ function statusTagType(v) {
   if (v === 50) return 'danger'
   if (v === 60) return 'warning'
   return 'info'
+}
+
+const previewRef = ref()
+function rowFiles(row) {
+  return parseFileUrlList(row?.contractFileUrl)
+}
+function previewFile(url) {
+  previewRef.value?.open(url)
 }
 
 async function load() {
@@ -282,20 +292,20 @@ function checkOverflow(e, row, field) {
         </el-table-column>
         <el-table-column prop="startDate" label="开始" width="110" />
         <el-table-column prop="endDate" label="结束" width="110" />
-        <el-table-column label="附件" width="60" :cell-class-name="() => 'no-row-click'">
+        <el-table-column label="附件" width="88" :cell-class-name="() => 'no-row-click'">
           <template #default="{ row }">
-            <template v-if="row.contractFileUrl">
-              <template v-if="(() => { try { const p = JSON.parse(row.contractFileUrl); return Array.isArray(p) && p.length > 1 } catch { return false } })()">
+            <template v-if="rowFiles(row).length">
+              <template v-if="rowFiles(row).length > 1">
                 <el-popover placement="top" :width="220" trigger="hover">
                   <template #reference>
-                    <el-link type="primary" @click.stop>查看({{ (() => { try { return JSON.parse(row.contractFileUrl).length } catch { return 1 } })() }})</el-link>
+                    <el-link type="primary" @click.stop>浏览({{ rowFiles(row).length }})</el-link>
                   </template>
-                  <div v-for="(u, idx) in (() => { try { const p = JSON.parse(row.contractFileUrl); return Array.isArray(p) ? p : [row.contractFileUrl] } catch { return [row.contractFileUrl] } })()" :key="idx" style="margin: 4px 0">
-                    <el-link :href="u" target="_blank" rel="noopener" type="primary" size="small" @click.stop>附件 {{ idx + 1 }}</el-link>
+                  <div v-for="(u, idx) in rowFiles(row)" :key="idx" style="margin: 4px 0">
+                    <el-link type="primary" size="small" @click.stop="previewFile(u)">附件 {{ idx + 1 }}</el-link>
                   </div>
                 </el-popover>
               </template>
-              <el-link v-else :href="(() => { try { const p = JSON.parse(row.contractFileUrl); return Array.isArray(p) ? p[0] : row.contractFileUrl } catch { return row.contractFileUrl } })()" target="_blank" rel="noopener" type="primary" @click.stop>查看</el-link>
+              <el-link v-else type="primary" @click.stop="previewFile(rowFiles(row)[0])">浏览</el-link>
             </template>
             <span v-else>—</span>
           </template>
@@ -349,6 +359,7 @@ function checkOverflow(e, row, field) {
         />
       </div>
     </el-card>
+    <FilePreviewDialog ref="previewRef" />
   </div>
 </template>
 
