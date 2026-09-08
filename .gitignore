@@ -59,3 +59,7 @@ application-prod.yml
 
 # 只保留模板文件
 !application.yml.example
+
+# Vite 本地缓存
+web/.vite/
+.vite/

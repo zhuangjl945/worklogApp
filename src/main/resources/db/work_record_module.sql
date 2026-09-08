@@ -1,3 +1,10 @@
+-- 创建数据库（执行前请确认权限）
+CREATE DATABASE IF NOT EXISTS work_log_system 
+  DEFAULT CHARACTER SET utf8mb4 
+  COLLATE utf8mb4_unicode_ci;
+
+USE work_log_system;
+
 -- 用户表 user
 CREATE TABLE user (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',

@@ -24,6 +24,11 @@
 - ✅ **任务转移**：支持工作任务的转移和审批流程
 - ✅ **费用管理**：记录工作相关费用，支持费用类型分类
 
+## 项目截图
+
+<img width="1850" height="970" alt="首页截图" src="https://github.com/user-attachments/assets/595078d2-060e-47b2-a6b8-e13c209a92f7" />
+<img width="1900" height="956" alt="工作记录截图" src="https://github.com/user-attachments/assets/8505accf-d680-4cfa-8896-8b246e17ff2e" />
+
 ## 🛠 技术栈
 
 ### 后端技术
