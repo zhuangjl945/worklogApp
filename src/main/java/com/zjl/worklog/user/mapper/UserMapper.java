@@ -13,6 +13,11 @@ public interface UserMapper {
 
     UserEntity selectById(@Param("id") Long id);
 
+    /**
+     * 查询仍使用历史明文口令（无 {id} 前缀）的账号，供启动时批量升级为哈希。
+     */
+    List<UserEntity> selectNeedPasswordUpgrade();
+
     long count(@Param("username") String username,
                @Param("realName") String realName,
                @Param("deptId") Long deptId,

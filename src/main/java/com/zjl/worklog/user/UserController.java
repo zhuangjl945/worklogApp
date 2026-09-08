@@ -9,7 +9,7 @@ import com.zjl.worklog.user.mapper.UserMapper;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import com.zjl.worklog.security.PasswordService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,11 +23,11 @@ import java.util.Map;
 public class UserController {
 
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordService passwordService;
 
-    public UserController(UserMapper userMapper, PasswordEncoder passwordEncoder) {
+    public UserController(UserMapper userMapper, PasswordService passwordService) {
         this.userMapper = userMapper;
-        this.passwordEncoder = passwordEncoder;
+        this.passwordService = passwordService;
     }
 
     @GetMapping("/count")
@@ -90,7 +90,7 @@ public class UserController {
 
         UserEntity entity = new UserEntity();
         entity.setUsername(req.getUsername());
-        entity.setPassword(passwordEncoder.encode(req.getPassword()));
+        entity.setPassword(passwordService.encode(req.getPassword()));
         entity.setRealName(req.getRealName());
         entity.setDeptId(req.getDeptId());
         entity.setStatus(req.getStatus() == null ? 1 : req.getStatus());
@@ -131,7 +131,7 @@ public class UserController {
         if (existed == null) {
             throw new BizException(40001, "用户不存在");
         }
-        userMapper.updatePassword(id, passwordEncoder.encode(req.getNewPassword()));
+        userMapper.updatePassword(id, passwordService.encode(req.getNewPassword()));
         return ApiResponse.ok(true);
     }
 

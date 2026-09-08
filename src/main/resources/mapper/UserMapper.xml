@@ -53,6 +53,15 @@
         LIMIT 1
     </select>
 
+    <!-- 明文口令识别：哈希一律带 {id} 前缀，无前缀即为待迁移的存量明文 -->
+    <select id="selectNeedPasswordUpgrade" resultMap="UserEntityMap">
+        SELECT id, username, password, real_name, dept_id, status, create_time, update_time
+        FROM user
+        WHERE password IS NOT NULL
+          AND password &lt;&gt; ''
+          AND password NOT LIKE '{%'
+    </select>
+
     <select id="count" resultType="long">
         SELECT COUNT(1)
         FROM user

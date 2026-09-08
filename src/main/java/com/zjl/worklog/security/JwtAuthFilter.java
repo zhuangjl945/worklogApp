@@ -30,7 +30,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return "/api/auth/login".equals(uri) || uri.startsWith("/assets/") || uri.endsWith(".html");
+        // 免登录路径直接跳过本过滤器，省掉一次无意义的签名校验：
+        // 1) 登录接口本身还没有 token；2) /api/public/** 是手机端访客接口，靠渠道签名 + 限流保护；
+        // 3) 静态资源与 SPA 页面壳（.html）不需要身份。
+        // 注意：跳过过滤器意味着 UserContext 为空，这些接口内部绝不可依赖登录态。
+        return "/api/auth/login".equals(uri)
+                || uri.startsWith("/api/public/")
+                || uri.startsWith("/assets/")
+                || uri.endsWith(".html");
     }
 
     @Override

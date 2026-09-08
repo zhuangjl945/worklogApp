@@ -9,7 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.password.NoOpPasswordEncoder;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -17,9 +17,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 public class SecurityConfig {
 
+    /**
+     * 口令编码器：DelegatingPasswordEncoder，默认 bcrypt 并带 {bcrypt} 前缀。
+     * 前缀的意义是「以后换算法不用洗数据」——校验时按前缀选实现，升级存量哈希可平滑过渡。
+     *
+     * <p>注意：历史的 NoOpPasswordEncoder（明文）已废弃，明文兼容逻辑收敛在 PasswordService 里。
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return NoOpPasswordEncoder.getInstance();
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 
     @Bean
@@ -28,6 +34,7 @@ public class SecurityConfig {
                                                    ObjectMapper objectMapper) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                // 真正的规则由 SecurityBeansConfig#corsConfigurationSource 提供；未配置来源时等于不放开跨域
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -39,6 +46,12 @@ public class SecurityConfig {
                                 "/vite.svg",
                                 "/favicon.ico",
                                 "/api/auth/login"
+                        ).permitAll()
+                        // 手机端问题登记：静态页面入口 + 免登录接口（靠渠道签名与限流保护，不靠登录态）
+                        .requestMatchers(
+                                "/m",
+                                "/m/**",
+                                "/api/public/**"
                         ).permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()

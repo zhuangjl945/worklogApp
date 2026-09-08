@@ -7,11 +7,11 @@ import com.zjl.worklog.common.exception.BizException;
 import com.zjl.worklog.security.CurrentUser;
 import com.zjl.worklog.security.JwtProps;
 import com.zjl.worklog.security.JwtTokenService;
+import com.zjl.worklog.security.PasswordService;
 import com.zjl.worklog.security.UserContext;
 import com.zjl.worklog.user.entity.UserEntity;
 import com.zjl.worklog.user.mapper.UserMapper;
 import jakarta.validation.Valid;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,16 +23,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordService passwordService;
     private final JwtTokenService tokenService;
     private final JwtProps jwtProps;
 
     public AuthController(UserMapper userMapper,
-                          PasswordEncoder passwordEncoder,
+                          PasswordService passwordService,
                           JwtTokenService tokenService,
                           JwtProps jwtProps) {
         this.userMapper = userMapper;
-        this.passwordEncoder = passwordEncoder;
+        this.passwordService = passwordService;
         this.tokenService = tokenService;
         this.jwtProps = jwtProps;
     }
@@ -46,7 +46,7 @@ public class AuthController {
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BizException(4002, "账号已被禁用");
         }
-        if (!passwordEncoder.matches(req.getPassword(), user.getPassword())) {
+        if (!passwordService.matchesAndUpgrade(user, req.getPassword())) {
             throw new BizException(4001, "用户名或密码错误");
         }
 
