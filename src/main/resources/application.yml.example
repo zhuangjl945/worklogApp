@@ -53,3 +53,11 @@ aliyun:
 #   JWT_SECRET               必填，>=32 字符
 #   MYSQL_PROD_USER/PASS     必填
 #   ALIYUN_OSS_ACCESS_KEY_ID/SECRET  使用附件上传时必填
+
+# 手机端问题登记的防刷阈值（内部员工场景，默认值已按同办公室共用出口 IP 放宽）
+ticket:
+  rate:
+    ip-count: 8            # 单 IP 在窗口内允许的提交次数
+    ip-window-seconds: 600 # 窗口长度
+    channel-qpm: 60        # 单渠道每分钟提交上限
+    phone-hour: 5          # 同一手机号每小时上限

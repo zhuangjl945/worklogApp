@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zjl.worklog.ticket.mapper.TicketChannelMapper">
+
+    <resultMap id="TicketChannelMap" type="com.zjl.worklog.ticket.entity.TicketChannelEntity">
+        <id column="id" property="id"/>
+        <result column="channel_code" property="channelCode"/>
+        <result column="channel_name" property="channelName"/>
+        <result column="dept_id" property="deptId"/>
+        <result column="default_category_id" property="defaultCategoryId"/>
+        <result column="need_phone" property="needPhone"/>
+        <result column="daily_limit" property="dailyLimit"/>
+
+        <result column="remark" property="remark"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="BaseColumns">
+        id, channel_code, channel_name, dept_id, default_category_id, need_phone,
+        daily_limit, remark, status, create_time, update_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_channel (
+            channel_code, channel_name, dept_id, default_category_id, need_phone,
+            daily_limit, remark, status
+        ) VALUES (
+            #{channelCode}, #{channelName}, #{deptId}, #{defaultCategoryId}, #{needPhone},
+            #{dailyLimit}, #{remark}, #{status}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE ticket_channel
+        <set>
+            <if test="channelName != null">channel_name = #{channelName},</if>
+            <if test="defaultCategoryId != null">default_category_id = #{defaultCategoryId},</if>
+            <if test="needPhone != null">need_phone = #{needPhone},</if>
+            <if test="dailyLimit != null">daily_limit = #{dailyLimit},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+
+    <select id="selectById" resultMap="TicketChannelMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM ticket_channel
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectByCode" resultMap="TicketChannelMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM ticket_channel
+        WHERE channel_code = #{channelCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectByName" resultMap="TicketChannelMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM ticket_channel
+        WHERE dept_id = #{deptId} AND channel_name = #{channelName}
+        LIMIT 1
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_channel
+        <where>
+            <if test="deptId != null">AND dept_id = #{deptId}</if>
+            <if test="status != null">AND status = #{status}</if>
+        </where>
+    </select>
+
+    <select id="selectPage" resultMap="TicketChannelMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM ticket_channel
+        <where>
+            <if test="deptId != null">AND dept_id = #{deptId}</if>
+            <if test="status != null">AND status = #{status}</if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+</mapper>

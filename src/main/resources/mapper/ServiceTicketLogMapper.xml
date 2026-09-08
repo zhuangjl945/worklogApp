@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zjl.worklog.ticket.mapper.ServiceTicketLogMapper">
+
+    <resultMap id="ServiceTicketLogMap" type="com.zjl.worklog.ticket.entity.ServiceTicketLogEntity">
+        <id column="id" property="id"/>
+        <result column="ticket_id" property="ticketId"/>
+        <result column="operator_type" property="operatorType"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="operator_name" property="operatorName"/>
+        <result column="action" property="action"/>
+        <result column="remark" property="remark"/>
+        <result column="image_urls" property="imageUrls"/>
+        <result column="visible_to_reporter" property="visibleToReporter"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="BaseColumns">
+        id, ticket_id, operator_type, operator_id, operator_name, action,
+        remark, image_urls, visible_to_reporter, create_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO service_ticket_log (
+            ticket_id, operator_type, operator_id, operator_name, action,
+            remark, image_urls, visible_to_reporter
+        ) VALUES (
+            #{ticketId}, #{operatorType}, #{operatorId}, #{operatorName}, #{action},
+            #{remark}, #{imageUrls}, #{visibleToReporter}
+        )
+    </insert>
+
+    <select id="selectByTicketId" resultMap="ServiceTicketLogMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM service_ticket_log
+        WHERE ticket_id = #{ticketId}
+        ORDER BY id ASC
+    </select>
+
+    <!-- 报修人视角：强制过滤内部备注 -->
+    <select id="selectVisibleByTicketId" resultMap="ServiceTicketLogMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM service_ticket_log
+        WHERE ticket_id = #{ticketId}
+          AND visible_to_reporter = 1
+        ORDER BY id ASC
+    </select>
+
+</mapper>

@@ -47,7 +47,7 @@
     </resultMap>
 
     <sql id="BaseColumns">
-        id, user_id, dept_id, biz_dept_id, category_id, status_id, title, content, image_urls,
+        id, user_id, source_type, source_id, dept_id, biz_dept_id, category_id, status_id, title, content, image_urls,
         start_time, end_time, duration_minutes, is_important, deleted, create_time, update_time
     </sql>
 
@@ -180,11 +180,11 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO work_record (
-            user_id, dept_id, biz_dept_id, category_id, status_id,
+            user_id, source_type, source_id, dept_id, biz_dept_id, category_id, status_id,
             title, content, image_urls, start_time, end_time, duration_minutes,
             is_important, deleted
         ) VALUES (
-            #{userId}, #{deptId}, #{bizDeptId}, #{categoryId}, #{statusId},
+            #{userId}, IFNULL(#{sourceType}, 'MANUAL'), #{sourceId}, #{deptId}, #{bizDeptId}, #{categoryId}, #{statusId},
             #{title}, #{content}, #{imageUrls}, #{startTime}, #{endTime}, #{durationMinutes},
             #{isImportant}, 0
         )

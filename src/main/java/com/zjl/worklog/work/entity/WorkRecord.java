@@ -8,6 +8,10 @@ import java.time.LocalDateTime;
 public class WorkRecord {
     private Long id;
     private Long userId;
+    /** 来源：MANUAL-手工登记，TICKET-手机端问题工单 */
+    private String sourceType;
+    /** 来源主键（source_type=TICKET 时为 service_ticket.id） */
+    private Long sourceId;
     private Long deptId;
     private Long bizDeptId;
     private Long categoryId;

@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zjl.worklog.ticket.mapper.ServiceTicketMapper">
+
+    <resultMap id="ServiceTicketMap" type="com.zjl.worklog.ticket.entity.ServiceTicketEntity">
+        <id column="id" property="id"/>
+        <result column="ticket_no" property="ticketNo"/>
+        <result column="channel_id" property="channelId"/>
+        <result column="dept_id" property="deptId"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="status" property="status"/>
+        <result column="urgency" property="urgency"/>
+        <result column="title" property="title"/>
+        <result column="content" property="content"/>
+        <result column="location" property="location"/>
+        <result column="contact_name" property="contactName"/>
+        <result column="contact_phone" property="contactPhone"/>
+        <result column="image_urls" property="imageUrls"/>
+        <result column="access_token_hash" property="accessTokenHash"/>
+        <result column="assignee_id" property="assigneeId"/>
+        <result column="assignee_name" property="assigneeName"/>
+        <result column="work_record_id" property="workRecordId"/>
+        <result column="submit_ip" property="submitIp"/>
+        <result column="submit_ua" property="submitUa"/>
+        <result column="due_time" property="dueTime"/>
+        <result column="accept_time" property="acceptTime"/>
+        <result column="done_time" property="doneTime"/>
+        <result column="close_time" property="closeTime"/>
+        <result column="rating" property="rating"/>
+        <result column="rating_comment" property="ratingComment"/>
+        <result column="deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="BaseColumns">
+        id, ticket_no, channel_id, dept_id, category_id, status, urgency,
+        title, content, location, contact_name, contact_phone, image_urls,
+        access_token_hash, assignee_id, assignee_name, work_record_id,
+        submit_ip, submit_ua, due_time, accept_time, done_time, close_time,
+        rating, rating_comment, deleted, create_time, update_time
+    </sql>
+
+    <!--
+      受理台的统一筛选条件。
+      注意 dept_id 是权限边界，由服务端从登录上下文注入，前端传的 deptId 只能进一步收窄、不能放开。
+    -->
+    <sql id="WhereClause">
+        WHERE deleted = 0
+        AND dept_id = #{deptId}
+        <if test="statusList != null and statusList.size() > 0">
+            AND status IN
+            <foreach collection="statusList" item="st" open="(" separator="," close=")">#{st}</foreach>
+        </if>
+        <if test="categoryId != null">
+            AND category_id = #{categoryId}
+        </if>
+        <if test="assigneeId != null">
+            AND assignee_id = #{assigneeId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                title LIKE CONCAT('%', #{keyword}, '%')
+                OR location LIKE CONCAT('%', #{keyword}, '%')
+                OR contact_name LIKE CONCAT('%', #{keyword}, '%')
+                OR ticket_no = #{keyword}
+            )
+        </if>
+        <!-- 超时口径：未进终态且已过 SLA。这里的 0/10/20 与 TicketStatus.openCodes() 对应 -->
+        <if test="overdue != null and overdue == true">
+            AND due_time IS NOT NULL
+            AND due_time &lt; NOW()
+            AND status IN (0, 10, 20)
+        </if>
+        <if test="createTimeFrom != null">
+            AND create_time &gt;= #{createTimeFrom}
+        </if>
+        <if test="createTimeTo != null">
+            AND create_time &lt;= #{createTimeTo}
+        </if>
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO service_ticket (
+            ticket_no, channel_id, dept_id, category_id, status, urgency,
+            title, content, location, contact_name, contact_phone, image_urls,
+            access_token_hash, submit_ip, submit_ua, due_time, deleted
+        ) VALUES (
+            #{ticketNo}, #{channelId}, #{deptId}, #{categoryId}, #{status}, #{urgency},
+            #{title}, #{content}, #{location}, #{contactName}, #{contactPhone}, #{imageUrls},
+            #{accessTokenHash}, #{submitIp}, #{submitUa}, #{dueTime}, 0
+        )
+    </insert>
+
+    <select id="selectById" resultMap="ServiceTicketMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM service_ticket
+        WHERE id = #{id} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectByNo" resultMap="ServiceTicketMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM service_ticket
+        WHERE ticket_no = #{ticketNo} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM service_ticket
+        <include refid="WhereClause"/>
+    </select>
+
+    <select id="selectPage" resultMap="ServiceTicketMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM service_ticket
+        <include refid="WhereClause"/>
+        ORDER BY status ASC, due_time ASC, id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!--
+      状态跃迁：必须带「当前状态在期望集合内」的条件，返回 0 行即代表被他人抢先处理。
+      各时间字段只在对应跃迁传值，null 时保持原值（用 COALESCE 而非 IFNULL 语义一致，此处统一 IFNULL）。
+    -->
+    <update id="updateStatusCas">
+        UPDATE service_ticket
+        SET status = #{toStatus},
+            assignee_id = COALESCE(#{assigneeId}, assignee_id),
+            assignee_name = COALESCE(#{assigneeName}, assignee_name),
+            accept_time = COALESCE(accept_time, #{acceptTime}),
+            done_time = COALESCE(#{doneTime}, done_time),
+            close_time = COALESCE(#{closeTime}, close_time)
+        WHERE id = #{id}
+          AND deleted = 0
+          AND status IN
+          <foreach collection="expectedStatusList" item="es" open="(" separator="," close=")">#{es}</foreach>
+    </update>
+
+    <update id="bindWorkRecord">
+        UPDATE service_ticket
+        SET work_record_id = #{workRecordId}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="clearDoneTime">
+        UPDATE service_ticket
+        SET done_time = NULL
+        WHERE id = #{id} AND deleted = 0
+    </update>
+    <update id="updateRating">
+        UPDATE service_ticket
+        SET rating = #{rating},
+            rating_comment = #{ratingComment}
+        WHERE id = #{id} AND deleted = 0
+          AND rating IS NULL
+    </update>
+
+    <select id="countByNoPrefix" resultType="long">
+        SELECT COUNT(1)
+        FROM service_ticket
+        WHERE ticket_no LIKE CONCAT(#{prefix}, '%')
+    </select>
+
+    <select id="countTodayByChannel" resultType="long">
+        SELECT COUNT(1)
+        FROM service_ticket
+        WHERE channel_id = #{channelId}
+          AND deleted = 0
+          AND create_time &gt;= CURDATE()
+    </select>
+
+</mapper>
