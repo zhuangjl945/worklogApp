@@ -14,6 +14,30 @@ class TicketGuardTest {
     private static final String DIR = "work-records/";
 
     @Test
+    @DisplayName("完整访问地址能归一化成 objectKey，非法输入返回空串")
+    void toKeyNormalizesUrlAndRejectsGarbage() {
+        // 前端 uploadToOss() 返回的就是这种完整地址
+        assertEquals("work-records/tickets/AB12CD34/2026/09/x.jpg",
+                TicketImageKeys.toKey("https://my-bucket.oss-cn-hangzhou.aliyuncs.com/work-records/tickets/AB12CD34/2026/09/x.jpg"));
+        // 带签名参数的地址要能去掉 query，否则前缀比对与取图都会失败
+        assertEquals("work-records/tickets/AB12CD34/2026/09/x.jpg",
+                TicketImageKeys.toKey("https://h.com/work-records/tickets/AB12CD34/2026/09/x.jpg?Expires=1&Signature=abc"));
+        // 本来就是 key，原样保留
+        assertEquals("work-records/tickets/AB12CD34/x.jpg",
+                TicketImageKeys.toKey("work-records/tickets/AB12CD34/x.jpg"));
+        // 只有域名没有路径：视为非法
+        assertEquals("", TicketImageKeys.toKey("https://h.com"));
+        assertEquals("", TicketImageKeys.toKey(null));
+        assertEquals("", TicketImageKeys.toKey("   "));
+        // 归一化后仍可被渠道前缀校验拦住：防止把完整 URL 当绕过手段
+        assertFalse(TicketImageKeys.belongsToChannel(DIR, "AB12CD34",
+                "https://h.com/work-records/tickets/FF00FF00/2026/09/x.jpg"));
+        assertTrue(TicketImageKeys.belongsToChannel(DIR, "AB12CD34",
+                "https://h.com/work-records/tickets/AB12CD34/2026/09/x.jpg"));
+    }
+
+
+    @Test
     @DisplayName("图片 key 必须落在本渠道目录下，否则视为越权")
     void imageKeyMustBelongToChannel() {
         assertTrue(TicketImageKeys.belongsToChannel(DIR, "AB12CD34",

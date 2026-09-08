@@ -32,9 +32,11 @@ import java.util.Map;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final com.zjl.worklog.oss.OssObjectReader ossObjectReader;
 
-    public TicketController(TicketService ticketService) {
+    public TicketController(TicketService ticketService, com.zjl.worklog.oss.OssObjectReader ossObjectReader) {
         this.ticketService = ticketService;
+        this.ossObjectReader = ossObjectReader;
     }
 
     /** 状态字典：给受理台的状态筛选下拉用，直接来自状态机枚举，保证前端不会出现非法状态 */
@@ -167,6 +169,31 @@ public class TicketController {
         return ApiResponse.ok(data);
     }
 
+    /**
+     * 受理台取图：与报修人侧对称，但鉴权方式不同（登录态 + 科室边界）。
+     *
+     * <p>不走 /api/oss/preview-url 那条路，是因为它要求入参是完整 URL 并会校验 bucket 域名，
+     * 而工单里存的是 objectKey；也不依赖 bucket 是否公开读——将来改成私有读这里不用动。
+     */
+    @GetMapping("/{id}/image")
+    public org.springframework.http.ResponseEntity<byte[]> image(@PathVariable Long id,
+                                                                @RequestParam String key) {
+        CurrentUser cu = requireLogin();
+        com.zjl.worklog.ticket.entity.ServiceTicketEntity ticket = ticketService.requireInDept(id, cu.getDeptId());
+        if (ticketService.findImage(ticket, key) == null) {
+            throw new BizException(40303, "图片不属于该工单");
+        }
+        byte[] data = ossObjectReader.read(key);
+        org.springframework.http.MediaType type = key.toLowerCase().endsWith(".png")
+                ? org.springframework.http.MediaType.IMAGE_PNG
+                : key.toLowerCase().endsWith(".gif") ? org.springframework.http.MediaType.IMAGE_GIF
+                : key.toLowerCase().endsWith(".webp") ? org.springframework.http.MediaType.parseMediaType("image/webp")
+                : org.springframework.http.MediaType.IMAGE_JPEG;
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(type)
+                .header("Cache-Control", "private, max-age=300")
+                .body(data);
+    }
     private CurrentUser requireLogin() {
         CurrentUser cu = UserContext.get();
         if (cu == null) {

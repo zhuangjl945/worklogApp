@@ -16,6 +16,8 @@ import java.util.List;
 public class TicketPublicView {
 
     private String ticketNo;
+    /** 渠道码本身就是公开信息（印在二维码上），报修人补充照片时要靠它换上传凭证 */
+    private String channelCode;
     private String title;
     private String content;
     private String location;

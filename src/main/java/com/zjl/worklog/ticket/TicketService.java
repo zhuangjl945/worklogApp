@@ -234,6 +234,10 @@ public class TicketService {
     /** 报修人查看进度：只返回对其可见的流转记录 */
     public TicketPublicView publicDetail(ServiceTicketEntity ticket) {
         TicketPublicView view = TicketPublicView.of(ticket, null);
+        TicketChannelEntity viewChannel = channelMapper.selectById(ticket.getChannelId());
+        if (viewChannel != null) {
+            view.setChannelCode(viewChannel.getChannelCode());
+        }
         view.setImages(readJson(ticket.getImageUrls()));
         List<TicketPublicView.LogItem> items = new ArrayList<>();
         for (ServiceTicketLogEntity l : logMapper.selectVisibleByTicketId(ticket.getId())) {
@@ -544,6 +548,7 @@ public class TicketService {
         if (withChannelName && e.getChannelId() != null) {
             TicketChannelEntity channel = channelMapper.selectById(e.getChannelId());
             view.setChannelName(channel == null ? null : channel.getChannelName());
+            view.setChannelCode(channel == null ? null : channel.getChannelCode());
         }
         if (e.getCategoryId() != null && e.getDeptId() != null) {
             WorkCategory category = categoryMapper.selectById(e.getCategoryId(), e.getDeptId());
@@ -566,7 +571,11 @@ public class TicketService {
             if (!StringUtils.hasText(key)) {
                 continue;
             }
-            String k = key.trim();
+            // 统一存 objectKey：完整 URL 会随域名变化而失效，也不能用来做前缀校验
+            String k = TicketImageKeys.toKey(key);
+            if (k.isEmpty()) {
+                continue;
+            }
             if (!TicketImageKeys.belongsToChannel(ossDirPrefix, channelCode, k)) {
                 throw new BizException(40303, "图片不属于当前登记入口，请重新上传");
             }

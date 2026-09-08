@@ -16,6 +16,8 @@ public class TicketView {
     private String ticketNo;
     private Long channelId;
     private String channelName;
+    /** 受理人回复时要把图片传到同一个渠道目录下，前端需要它拼 dir */
+    private String channelCode;
     private Long deptId;
     private Long categoryId;
     private String categoryName;
