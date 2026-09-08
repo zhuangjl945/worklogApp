@@ -1,14 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
-<<<<<<< HEAD
-import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand } from '@element-plus/icons-vue'
-=======
-import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close } from '@element-plus/icons-vue'
->>>>>>> dev
+import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { me } from '../api/auth'
 import { workRecordTransferAccept, workRecordTransferPending, workRecordTransferReject } from '../api/work'
+import { ticketPendingCount } from '../api/ticket'
 
 const router = useRouter()
 const route = useRoute()
@@ -30,13 +27,13 @@ function toggleSider() {
 }
 
 const displayName = computed(() => user.value?.realName || user.value?.username || '用户')
-const siderCollapsed = ref(false)
 
 // 菜单项映射，用于获取标签名称
 const menuLabelMap = {}
 const menuItems = [
   { path: '/home', label: '首页', icon: HomeFilled },
   { path: '/work-records', label: '工作记录', icon: EditPen },
+  { path: '/tickets', label: '问题受理', icon: Tickets },
   {
     label: '合同管理',
     icon: DocumentCopy,
@@ -58,7 +55,8 @@ const menuItems = [
     children: [
       { path: '/depts', label: '科室管理', icon: FolderOpened },
       { path: '/users', label: '员工管理', icon: UserFilled },
-      { path: '/work-categories', label: '工作分类维护', icon: CollectionTag }
+      { path: '/work-categories', label: '工作分类维护', icon: CollectionTag },
+      { path: '/ticket-channels', label: '登记渠道维护', icon: Postcard }
     ]
   }
 ]
@@ -98,7 +96,7 @@ function closeTab(path, event) {
 // 监听路由变化，打开新 Tab
 router.afterEach((to) => {
   if (!tabs.value.find(t => t.path === to.path)) {
-    const label = menuLabelMap[to.path] || to.path
+    const label = menuLabelMap[to.path] || to.meta?.label || to.path
     tabs.value.push({ path: to.path, label, closable: to.path !== '/home' })
   }
   activeTab.value = to.path
@@ -130,6 +128,23 @@ async function loadPendingTransfers() {
   } catch (e) {
     // 首页提醒不阻断主流程
   }
+}
+
+// 手机端登记上来的待受理问题：和任务转移共用同一个轮询节拍，不再多起一个定时器
+const pendingTicketCount = ref(0)
+
+async function loadPendingTickets() {
+  try {
+    const resp = await ticketPendingCount()
+    pendingTicketCount.value = resp?.data?.deptPending ?? 0
+  } catch (e) {
+    // 账号没绑科室时后端会直接拒绝，这里静默，不打扰主流程
+  }
+}
+
+function refreshNotices() {
+  loadPendingTransfers()
+  loadPendingTickets()
 }
 
 async function acceptTransfer(row) {
@@ -171,7 +186,8 @@ function logout() {
 onMounted(async () => {
   await loadMe()
   await loadPendingTransfers()
-  transferPollTimer = setInterval(loadPendingTransfers, 30000)
+  await loadPendingTickets()
+  transferPollTimer = setInterval(refreshNotices, 30000)
 })
 
 onUnmounted(() => {
@@ -194,6 +210,11 @@ onUnmounted(() => {
       </div>
 
       <div class="topRight">
+        <!-- 待受理工单：点一下直接进受理台，不做二级弹层，少一层交互也就少一处状态 -->
+        <el-badge :value="pendingTicketCount" :hidden="pendingTicketCount === 0" class="noticeBadge">
+          <el-button class="iconBtn" :icon="Tickets" circle title="待受理的问题登记" @click="switchTab('/tickets')" />
+        </el-badge>
+
         <el-popover v-model:visible="transferPopoverVisible" placement="bottom-end" :width="360" trigger="click">
           <template #reference>
             <el-badge :value="pendingTransferCount" :hidden="pendingTransferCount === 0" class="noticeBadge">
@@ -230,34 +251,22 @@ onUnmounted(() => {
       </div>
     </header>
 
-<<<<<<< HEAD
-    <div class="body" :class="{ collapsed: siderCollapsed }">
-      <aside class="sider" :class="{ collapsed: siderCollapsed }">
-        <button class="siderFloatToggle" type="button" @click="siderCollapsed = !siderCollapsed">
-          <el-icon><component :is="siderCollapsed ? Expand : Fold" /></el-icon>
+    <div class="body" :class="{ collapsed: isSiderCollapsed }">
+      <aside class="sider" :class="{ collapsed: isSiderCollapsed }">
+        <button class="siderFloatToggle" type="button" @click="toggleSider">
+          <el-icon><component :is="isSiderCollapsed ? Expand : Fold" /></el-icon>
         </button>
 
-        <div class="siderHeader" v-show="!siderCollapsed">
-=======
-    <div class="body">
-      <aside class="sider" :class="{ collapsed: isSiderCollapsed }">
-        <div class="siderHeader" :class="{ collapsed: isSiderCollapsed }">
->>>>>>> dev
+        <div class="siderHeader" v-show="!isSiderCollapsed">
           <div class="siderTitle">功能导航</div>
         </div>
 
         <el-menu
           :default-active="route.path"
           class="menu"
-<<<<<<< HEAD
-          router
-          :collapse="siderCollapsed"
-          :collapse-transition="true"
-=======
           :collapse="isSiderCollapsed"
           :collapse-transition="false"
           :router="false"
->>>>>>> dev
           background-color="transparent"
           text-color="rgba(255, 255, 255, 0.85)"
           active-text-color="#ffffff"
@@ -344,33 +353,6 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-<<<<<<< HEAD
-.siderToggleBtn {
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid #d7deea;
-  background: linear-gradient(180deg, #ffffff, #f6f8fc);
-  color: #334155;
-  padding: 0 12px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.siderToggleBtn:hover {
-  border-color: #93c5fd;
-  color: #1d4ed8;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
-  transform: translateY(-1px);
-}
-
-.siderToggleBtn:active {
-  transform: translateY(0);
-}
-
-.siderToggleIcon {
-  margin-right: 6px;
-  font-size: 14px;
-=======
 .collapseBtn {
   padding: 4px;
   margin-right: 4px;
@@ -378,7 +360,6 @@ onUnmounted(() => {
 
 .collapseBtn:hover {
   background: #f1f5f9;
->>>>>>> dev
 }
 
 .brand {
@@ -511,16 +492,12 @@ onUnmounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-<<<<<<< HEAD
   grid-template-columns: 240px 1fr;
   transition: grid-template-columns 0.25s ease;
 }
 
 .body.collapsed {
   grid-template-columns: 72px 1fr;
-=======
-  grid-template-columns: auto 1fr;
->>>>>>> dev
 }
 
 .sider {
@@ -537,7 +514,6 @@ onUnmounted(() => {
   box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.15), 8px 0 30px rgba(15, 23, 42, 0.25);
   padding: 14px 0;
   overflow-y: auto;
-<<<<<<< HEAD
   overflow-x: visible;
   color: rgba(255, 255, 255, 0.90);
   transition: width 0.25s ease, box-shadow 0.25s ease;
@@ -579,16 +555,6 @@ onUnmounted(() => {
 
 .sider.collapsed .siderFloatToggle:hover {
   transform: scale(1.06);
-=======
-  overflow-x: hidden;
-  color: #ffffff;
-  transition: width 0.3s ease;
-  width: 200px;
-}
-
-.sider.collapsed {
-  width: 64px;
->>>>>>> dev
 }
 
 .siderHeader {
@@ -628,22 +594,12 @@ onUnmounted(() => {
 
 .menu :deep(.el-sub-menu__title:hover),
 .menu :deep(.el-menu-item:hover) {
-<<<<<<< HEAD
   background-color: rgba(186, 230, 253, 0.12) !important;
 }
 
 .menu :deep(.el-menu-item.is-active) {
   background: linear-gradient(90deg, rgba(56, 189, 248, 0.24), rgba(14, 165, 233, 0.08)) !important;
   border-right: 3px solid #7dd3fc;
-=======
-  background-color: rgba(255, 255, 255, 0.12) !important;
-  color: #ffffff !important;
-}
-
-.menu :deep(.el-menu-item.is-active) {
-  background-color: rgba(59, 130, 246, 0.25) !important;
-  border-right: 3px solid #60a5fa;
->>>>>>> dev
   color: #ffffff !important;
   font-weight: 600;
 }
@@ -854,19 +810,11 @@ onUnmounted(() => {
 }
 
 .main-container {
-<<<<<<< HEAD
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 6px 10px;
-  box-sizing: border-box;
-=======
   flex: 1;
   overflow: auto;
   padding: 16px;
   width: 100%;
   max-width: 100%;
->>>>>>> dev
 }
 
 @media (max-width: 900px) {
