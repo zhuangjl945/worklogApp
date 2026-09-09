@@ -19,6 +19,7 @@ import { userPage } from '../api/user'
 import { deptAllEnabled, deptMyRootChildren } from '../api/dept'
 import WorkRecordDetailDrawer from './WorkRecordDetailDrawer.vue'
 import { uploadToOss } from '../utils/oss'
+import { ensureSignedUrls, signedList, signedUrl } from '../utils/ossView'
 import {
   fillTemplatePattern,
   parseCategoryTemplate,
@@ -818,6 +819,16 @@ watch(
   }
 )
 
+// 工作记录图片：数据一变就批量换短时签名地址。
+// 放这里而不是放在渲染函数里，是为了让 <el-image> 求值时只读缓存、不带副作用，
+// 否则每次重渲染都会往队列里塞请求。
+watch(
+  () => tableData.value.flatMap((r) => getRowImageUrls(r)),
+  (urls) => ensureSignedUrls(urls)
+)
+
+watch(contentImageUrls, (urls) => ensureSignedUrls(urls), { immediate: true })
+
 onMounted(async () => {
   await loadOptions()
   await load()
@@ -982,7 +993,7 @@ onMounted(async () => {
 
                   <div v-if="contentImageUrls.length > 0" class="inline-images">
                     <div v-for="u in contentImageUrls" :key="u" class="inline-image-item">
-                      <el-image :src="u" style="width: 64px; height: 64px; border-radius: 8px;" fit="cover" :preview-src-list="contentImageUrls" :initial-index="contentImageUrls.indexOf(u)" preview-teleported />
+                      <el-image :src="signedUrl(u)" style="width: 64px; height: 64px; border-radius: 8px;" fit="cover" :preview-src-list="signedList(contentImageUrls)" :initial-index="contentImageUrls.indexOf(u)" preview-teleported />
                       <el-button circle type="danger" :icon="Delete" size="small" class="inline-image-delete" @click.stop="deleteImage(u)" />
                     </div>
                   </div>
@@ -1043,10 +1054,10 @@ onMounted(async () => {
           <template #default="{ row }">
             <el-image
               v-if="getRowImageUrls(row).length > 0"
-              :src="getRowImageUrls(row)[0]"
+              :src="signedUrl(getRowImageUrls(row)[0])"
               style="width: 46px; height: 30px; border-radius: 8px;"
               fit="cover"
-              :preview-src-list="getRowImageUrls(row)"
+              :preview-src-list="signedList(getRowImageUrls(row))"
               preview-teleported
             />
             <span v-else>-</span>
@@ -1156,10 +1167,10 @@ onMounted(async () => {
             <div v-if="contentImageUrls.length > 0" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">
               <div v-for="u in contentImageUrls" :key="u" style="position: relative; width: 100px;">
                 <el-image
-                  :src="u"
+                  :src="signedUrl(u)"
                   style="width: 100px; height: 100px; border-radius: 10px;"
                   fit="cover"
-                  :preview-src-list="contentImageUrls"
+                  :preview-src-list="signedList(contentImageUrls)"
                   :initial-index="contentImageUrls.indexOf(u)"
                   preview-teleported
                 />

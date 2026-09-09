@@ -23,25 +23,11 @@ public final class TicketImageKeys {
     /**
      * 把「完整访问地址」或「objectKey」统一还原成 objectKey。
      *
-     * <p>前端 utils/oss.js 的 uploadToOss() 返回的是 https://bucket.host/dir/xx.jpg 这种完整地址
-     * （工作记录一直就是这么存的），而权限校验只能按 key 前缀判断。
-     * 不做这层归一化，受理人给自己工单附图会被误判成越权。
+     * <p>实现上提到 oss 包的 OssKeys：工作记录与合同附件同样是历史里存了完整地址，
+     * 两处各留一份归一化逻辑迟早会走偏，所以只保留一份。
      */
     public static String toKey(String urlOrKey) {
-        if (urlOrKey == null) {
-            return "";
-        }
-        String v = urlOrKey.trim();
-        if (v.isEmpty()) {
-            return "";
-        }
-        int scheme = v.indexOf("://");
-        if (scheme >= 0) {
-            int slash = v.indexOf('/', scheme + 3);
-            // 只有域名没有路径：视为非法输入，返回空串由上层拒绝
-            return slash < 0 ? "" : stripQueryAndSlash(v.substring(slash + 1));
-        }
-        return stripQueryAndSlash(v);
+        return com.zjl.worklog.oss.OssKeys.toKey(urlOrKey);
     }
 
     /**
@@ -56,18 +42,6 @@ public final class TicketImageKeys {
             return false;
         }
         return key.startsWith(channelPrefix(dirPrefix, channelCode));
-    }
-
-    private static String stripQueryAndSlash(String value) {
-        String v = value;
-        int query = v.indexOf('?');
-        if (query >= 0) {
-            v = v.substring(0, query);
-        }
-        while (v.startsWith("/")) {
-            v = v.substring(1);
-        }
-        return v;
     }
 
     /** 去掉路径穿越与非法字符，渠道码本身是十六进制，这里只兜底 */
