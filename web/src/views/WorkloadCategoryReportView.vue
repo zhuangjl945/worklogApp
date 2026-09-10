@@ -5,7 +5,7 @@ import { Search, RefreshRight, TrendCharts, Download } from '@element-plus/icons
 import * as XLSX from 'xlsx'
 import { workRecordStatsUserDeptCategory } from '../api/work'
 import { deptMyRootChildren } from '../api/dept'
-import { me } from '../api/auth'
+import { can as canFeature, canViewDept, currentProfile, ensurePermissions, ensureProfile, ROLE } from '../utils/auth'
 
 const loading = ref(false)
 const errorMsg = ref('')
@@ -31,6 +31,16 @@ function getMonthRange() {
 const monthRange = getMonthRange()
 
 const defaultDeptId = ref(null)
+
+// 这张表后端按 report.deptCross 权限点收口：拿到它才能自由选科室，
+// 否则科室管理员锁本科室、普通员工只算本人。界面把选不出结果的控件一起收掉。
+const canPickDept = computed(() => canFeature('report.deptCross', [ROLE.ADMIN]))
+const scopeHint = computed(() => {
+  if (canPickDept.value) return ''
+  return canViewDept.value
+    ? '当前统计范围：本科室（跨科室筛选未开放给你的角色）'
+    : '当前统计范围：仅本人（跨科室筛选未开放给你的角色）'
+})
 
 const form = reactive({
   createTimeFrom: monthRange.from,
@@ -153,8 +163,11 @@ async function loadData() {
     if (form.createTimeFrom) params.endTimeFrom = form.createTimeFrom
     if (form.createTimeTo) params.endTimeTo = form.createTimeTo
 
-    const deptId = form.deptId != null ? form.deptId : defaultDeptId.value
-    if (deptId != null) params.deptId = deptId
+    // 只有系统管理员才提交 deptId；其它角色传了也会被后端覆盖，不传更诚实
+    if (canPickDept.value) {
+      const deptId = form.deptId != null ? form.deptId : defaultDeptId.value
+      if (deptId != null) params.deptId = deptId
+    }
 
     const resp = await workRecordStatsUserDeptCategory(params)
     rows.value = resp.data || []
@@ -226,14 +239,11 @@ function onExportExcel() {
 }
 
 async function init() {
-  try {
-    const resp = await me()
-    defaultDeptId.value = resp?.data?.deptId ?? null
-    form.deptId = defaultDeptId.value
-  } catch {
-    // ignore
-  }
-  await loadDepts()
+  await Promise.all([ensureProfile(), ensurePermissions()])
+  defaultDeptId.value = currentProfile()?.deptId ?? null
+  form.deptId = defaultDeptId.value
+  // 科室下拉只有系统管理员用得上，别的角色不必多发一次请求
+  if (canPickDept.value) await loadDepts()
   await loadData()
 }
 
@@ -248,6 +258,8 @@ init()
         <div class="title">工作量统计</div>
       </div>
       <div class="subtitle">按人员 / 科室 / 工作分类统计工作量与费用汇总</div>
+      <!-- 非管理员看不到别人的量，先说明统计范围，免得以为报表漏了人 -->
+      <div class="scope-hint" v-if="scopeHint">{{ scopeHint }}</div>
     </div>
 
     <el-card class="card" shadow="never">
@@ -275,7 +287,7 @@ init()
             />
           </el-form-item>
 
-          <el-form-item label="科室">
+          <el-form-item v-if="canPickDept" label="科室">
             <el-select
               v-model="form.deptId"
               filterable
@@ -343,13 +355,13 @@ init()
 
 .titleIcon {
   font-size: 22px;
-  color: #3b82f6;
+  color: var(--g-text);
 }
 
 .title {
   font-size: 18px;
   font-weight: 900;
-  color: #111827;
+  color: var(--g-text);
 }
 
 .subtitle {
@@ -359,14 +371,20 @@ init()
 }
 
 .card {
-  border-radius: 14px;
+  border-radius: var(--g-radius-md);
+}
+
+.scope-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--g-text-muted);
 }
 
 .filters {
   margin-bottom: 12px;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid #e9edf5;
+  border: 1px solid var(--g-border);
   background: #fafbff;
 }
 
@@ -401,3 +419,4 @@ init()
   margin-bottom: 12px;
 }
 </style>
+

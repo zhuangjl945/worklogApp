@@ -65,3 +65,7 @@ export async function ticketChannelToggle(id, status) {
 export async function ticketChannelQrcode(id) {
   return await http.get(`/ticket-channels/${id}/qrcode`)
 }
+
+export async function ticketChannelLanOrigins() {
+  return await http.get('/ticket-channels/lan-origins')
+}

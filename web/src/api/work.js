@@ -130,6 +130,14 @@ export async function ossPreviewUrl(params) {
   return await http.get('/oss/preview-url', { params })
 }
 
+export async function ossPreviewFile(url) {
+  return await http.get('/oss/file', {
+    params: { url },
+    responseType: 'blob',
+    timeout: 60000
+  })
+}
+
 export async function ossDeleteObject(params) {
   return await http.delete('/oss/object', { params })
 }

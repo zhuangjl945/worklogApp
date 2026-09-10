@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus, Search, Refresh, Connection, Document, Delete, Notebook } from '@element-plus/icons-vue'
+import { Plus, Search, Connection, Document, Delete, Notebook } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   workCategoryEnabled,
@@ -15,9 +15,11 @@ import {
   workStatusEnabled,
   ossDeleteObject
 } from '../api/work'
-import { userPage } from '../api/user'
+import { userRoster } from '../api/user'
 import { deptAllEnabled, deptMyRootChildren } from '../api/dept'
 import WorkRecordDetailDrawer from './WorkRecordDetailDrawer.vue'
+import { useQueryConsole } from '../composables/useQueryConsole'
+import QueryConsole from '../components/QueryConsole.vue'
 import { uploadToOss } from '../utils/oss'
 import { ensureSignedUrls, signedList, signedUrl } from '../utils/ossView'
 import {
@@ -134,7 +136,9 @@ function normalizeCreateTimeRange(v) {
 function formatDateTime(dt) {
   if (!dt) return null
   const pad = (n) => String(n).padStart(2, '0')
-  const d = new Date(dt)
+  // 日期选择器按 value-format="x" 回传的是纯数字字符串，
+  // 直接 new Date("1757...") 会得到 Invalid Date，这里先把它转回数值
+  const d = new Date(typeof dt === 'string' && /^\d+$/.test(dt) ? Number(dt) : dt)
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
@@ -189,43 +193,176 @@ async function load() {
   }
 }
 
-function onSearch() {
+// ------------------------------------------------------------
+// 检索台逻辑：条件一变就自动重查，不再需要「查询」按钮
+// ------------------------------------------------------------
+
+// 只对筛选字段敏感，翻页、改每页条数不应触发重查
+const filterSignature = computed(() =>
+  JSON.stringify({
+    categoryIds: [...filters.categoryIds].sort((a, b) => a - b),
+    statusIds: [...filters.statusIds].sort((a, b) => a - b),
+    range: filters.createTimeRange || null,
+    title: filters.title.trim(),
+    overdue: filters.overdue,
+    importantOnly: filters.importantOnly
+  })
+)
+
+function runQuery() {
   filters.page = 1
   load()
 }
 
+const { expanded: filterExpanded, run: runSearch } = useQueryConsole({
+  getSignature: () => filterSignature.value,
+  runQuery
+})
+
 function onReset() {
-  filters.page = 1
-  filters.size = 10
   filters.categoryIds = []
   filters.statusIds = []
   filters.createTimeRange = null
   filters.title = ''
   filters.overdue = false
   filters.importantOnly = false
-  load()
+  runSearch()
 }
 
-function onPageChange(p) {
-  filters.page = p
-  load()
+// --- 常用视图：把每天重复的那几套检索固化成一排按钮 ---
+const OPEN_STATUS = [1, 2]
+
+const filterPresets = [
+  { key: 'todo', label: '待办' },
+  { key: 'overdue', label: '逾期' },
+  { key: 'important', label: '重要未闭环' },
+  { key: 'week', label: '本周新增' },
+  { key: 'all', label: '全部记录' }
+]
+
+function startOfThisWeek() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return d.getTime()
 }
 
-function onSizeChange(s) {
-  filters.size = s
-  filters.page = 1
-  load()
+function endOfToday() {
+  const d = new Date()
+  d.setHours(23, 59, 59, 999)
+  return d.getTime()
 }
 
-function toggleStatusFilter(id, checked) {
-  if (checked) {
-    if (!filters.statusIds.includes(id)) {
-      filters.statusIds.push(id)
-    }
-  } else {
-    filters.statusIds = filters.statusIds.filter((i) => i !== id)
+function isSameIdSet(list, ids) {
+  if (list.length !== ids.length) return false
+  const s = new Set(list)
+  return ids.every((i) => s.has(i))
+}
+
+// 当前条件恰好等于某个视图时才高亮，手动改过任何一项就落回「自定义」
+const activeFilterPreset = computed(() => {
+  const noCat = filters.categoryIds.length === 0
+  const hasRange = filters.createTimeRange && filters.createTimeRange.length === 2
+  const noFlags = !filters.overdue && !filters.importantOnly
+  const openOnly = isSameIdSet(filters.statusIds, OPEN_STATUS)
+  const allStatus = filters.statusIds.length === 0
+  if (noCat && !hasRange && openOnly && filters.overdue && !filters.importantOnly) return 'overdue'
+  if (noCat && !hasRange && openOnly && filters.importantOnly && !filters.overdue) return 'important'
+  if (noCat && !hasRange && openOnly && noFlags) return 'todo'
+  if (noCat && hasRange && allStatus && noFlags && Number(filters.createTimeRange[0]) === startOfThisWeek()) return 'week'
+  if (noCat && !hasRange && allStatus && noFlags) return 'all'
+  return null
+})
+
+function applyFilterPreset(key) {
+  // 预设只切「范围」，保留已输入的标题关键字，方便在结果里继续收窄
+  filters.categoryIds = []
+  filters.createTimeRange = null
+  filters.overdue = false
+  filters.importantOnly = false
+  filters.statusIds = key === 'todo' || key === 'overdue' || key === 'important' ? [...OPEN_STATUS] : []
+  if (key === 'overdue') filters.overdue = true
+  if (key === 'important') filters.importantOnly = true
+  if (key === 'week') filters.createTimeRange = [startOfThisWeek(), endOfToday()]
+  runSearch()
+}
+
+// --- 检索式回显：把此刻真正生效的条件写成一行，每个词块可单独摘掉 ---
+function shortStamp(v) {
+  const d = new Date(Number(v))
+  if (!Number.isFinite(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const filterChips = computed(() => {
+  const chips = []
+  const t = filters.title.trim()
+  if (t) chips.push({ key: 'title', field: '标题', value: `含「${t}」` })
+  if (filters.statusIds.length) {
+    chips.push({
+      key: 'status',
+      field: '状态',
+      value: filters.statusIds.map((id) => statusMap.value.get(id) || `#${id}`).join('、')
+    })
   }
-  onSearch()
+  if (filters.categoryIds.length) {
+    chips.push({
+      key: 'category',
+      field: '分类',
+      value: filters.categoryIds.map((id) => categoryMap.value.get(id) || `#${id}`).join('、')
+    })
+  }
+  if (filters.createTimeRange && filters.createTimeRange.length === 2) {
+    chips.push({ key: 'range', field: '创建', value: `${shortStamp(filters.createTimeRange[0])} → ${shortStamp(filters.createTimeRange[1])}` })
+  }
+  const marks = []
+  if (filters.overdue) marks.push('逾期')
+  if (filters.importantOnly) marks.push('重要')
+  if (marks.length) chips.push({ key: 'mark', field: '标记', value: marks.join('、') })
+  return chips
+})
+
+function removeFilterChip(key) {
+  if (key === 'title') filters.title = ''
+  else if (key === 'status') filters.statusIds = []
+  else if (key === 'category') filters.categoryIds = []
+  else if (key === 'range') filters.createTimeRange = null
+  else if (key === 'mark') {
+    filters.overdue = false
+    filters.importantOnly = false
+  }
+}
+
+// 折叠起来之后，还有几个条件在悄悄生效就得标出来，免得用户以为看到的是全量
+const hiddenActiveFilterCount = computed(() => {
+  if (filterExpanded.value) return 0
+  let n = 0
+  if (filters.categoryIds.length) n += 1
+  if (filters.createTimeRange && filters.createTimeRange.length === 2) n += 1
+  if (filters.overdue || filters.importantOnly) n += 1
+  return n
+})
+
+const dateShortcuts = [
+  { text: '最近 7 天', value: () => [Date.now() - 6 * 86400000, Date.now()] },
+  { text: '最近 30 天', value: () => [Date.now() - 29 * 86400000, Date.now()] },
+  { text: '本周', value: () => [startOfThisWeek(), Date.now()] },
+  {
+    text: '本月',
+    value: () => {
+      const d = new Date()
+      return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), Date.now()]
+    }
+  }
+]
+
+function toggleStatusFilter(id) {
+  if (filters.statusIds.includes(id)) {
+    filters.statusIds = filters.statusIds.filter((i) => i !== id)
+  } else {
+    filters.statusIds = [...filters.statusIds, id]
+  }
 }
 
 function toDateTimeValue(v) {
@@ -346,6 +483,7 @@ function getRowImageUrls(row) {
 
 const dialogs = reactive({ edit: false })
 const showInlineCreate = ref(false)
+const showFullpageEdit = ref(false)
 const editMode = ref('create')
 const currentId = ref(null)
 const formRef = ref()
@@ -390,7 +528,7 @@ async function handleCancelEdit(done) {
     }
   }
 
-  dialogs.edit = false
+  showFullpageEdit.value = false
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
 
@@ -512,8 +650,8 @@ const transferRules = {
 async function loadTransferUsers() {
   transferUsersLoading.value = true
   try {
-    const resp = await userPage({ page: 1, size: 200, status: 1 })
-    transferUserOptions.value = resp?.data?.records || []
+    const resp = await userRoster({ size: 200 })
+    transferUserOptions.value = resp?.data || []
   } catch (e) {
     ElMessage.error(e?.message || '加载用户列表失败')
   } finally {
@@ -627,7 +765,7 @@ function openEdit(row) {
 
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
-  dialogs.edit = true
+  showFullpageEdit.value = true
 }
 
 async function submit() {
@@ -656,7 +794,7 @@ async function submit() {
         ElMessage.success('更新成功')
       }
       originalImageUrls.value = parseUrls(form.imageUrls)
-      if (editMode.value === "create") { showInlineCreate.value = false } else { dialogs.edit = false }
+      if (editMode.value === "create") { showInlineCreate.value = false } else { showFullpageEdit.value = false }
       if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
       previewUrl.value = ''
       await load()
@@ -837,6 +975,7 @@ onMounted(async () => {
 
 <template>
   <div class="page">
+    <div v-if="!showFullpageEdit">
     <div class="toolbar">
       <div class="titleWrap">
         <el-icon class="titleIcon"><Document /></el-icon>
@@ -844,64 +983,84 @@ onMounted(async () => {
       </div>
     </div>
 
+    <QueryConsole
+      class="qc-block"
+      v-model:expanded="filterExpanded"
+      :presets="filterPresets"
+      :active-preset="activeFilterPreset"
+      :chips="filterChips"
+      :hidden-active-count="hiddenActiveFilterCount"
+      :result-text="'共 ' + total + ' 条'"
+      :busy="loading"
+      @select-preset="applyFilterPreset"
+      @remove-chip="removeFilterChip"
+      @clear-all="onReset"
+    >
+      <template #search>
+        <el-input v-model="filters.title" class="qc-search" placeholder="搜索标题关键字，回车即查" clearable @keyup.enter="runSearch">
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </template>
+
+      <template #inline>
+        <span class="qc-flabel">状态</span>
+        <div class="qc-pills" role="group" aria-label="按状态筛选">
+          <button
+            v-for="s in statusOptions"
+            :key="s.id"
+            type="button"
+            class="qc-pill"
+            :class="{ 'is-on': filters.statusIds.includes(s.id) }"
+            :aria-pressed="filters.statusIds.includes(s.id)"
+            @click="toggleStatusFilter(s.id)"
+          >
+            <span class="qc-pill-dot" aria-hidden="true" />
+            {{ s.statusName }}
+          </button>
+        </div>
+      </template>
+
+      <template #more>
+        <div class="qc-grid">
+          <div class="qc-cell">
+            <span class="qc-flabel">分类</span>
+            <el-select v-model="filters.categoryIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部分类" style="width: 100%">
+              <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.categoryName" />
+            </el-select>
+          </div>
+          <div class="qc-cell qc-cell--wide">
+            <span class="qc-flabel">创建时间</span>
+            <el-date-picker
+              :model-value="filters.createTimeRange"
+              :shortcuts="dateShortcuts"
+              type="datetimerange"
+              range-separator="至"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              value-format="x"
+              style="width: 100%"
+              @update:model-value="(v) => (filters.createTimeRange = normalizeCreateTimeRange(v))"
+            />
+          </div>
+          <div class="qc-cell">
+            <span class="qc-flabel">标记</span>
+            <div class="qc-pills">
+              <button type="button" class="qc-pill" :class="{ 'is-on': filters.overdue }" :aria-pressed="filters.overdue" @click="filters.overdue = !filters.overdue">
+                <span class="qc-pill-dot" aria-hidden="true" />仅逾期
+              </button>
+              <button type="button" class="qc-pill" :class="{ 'is-on': filters.importantOnly }" :aria-pressed="filters.importantOnly" @click="filters.importantOnly = !filters.importantOnly">
+                <span class="qc-pill-dot" aria-hidden="true" />仅重要
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </QueryConsole>
+
     <el-card shadow="never" class="card">
-      <div class="filter-bar">
-        <el-form :model="filters" inline class="filter-form">
-          <div class="filter-row">
-            <el-form-item label="分类">
-              <el-select
-                v-model="filters.categoryIds"
-                multiple
-                collapse-tags
-                collapse-tags-tooltip
-                clearable
-                placeholder="全部"
-                style="width: 220px"
-                @change="onSearch"
-              >
-                <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.categoryName" />
-              </el-select>
-            </el-form-item>
-            <div class="filter-row">
-            <el-form-item label="标题">
-              <el-input v-model="filters.title" placeholder="标题（模糊匹配）" clearable style="width: 200px" @keyup.enter="onSearch" />
-            </el-form-item>
-          </div>
-            <el-form-item label="状态">
-              <el-select v-model="filters.statusIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部" style="width: 200px" @change="onSearch">
-                <el-option v-for="s in statusOptions" :key="s.id" :value="s.id" :label="s.statusName" />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="创建时间">
-              <el-date-picker
-                :model-value="filters.createTimeRange"
-                @update:model-value="(v) => (filters.createTimeRange = normalizeCreateTimeRange(v))"
-                type="datetimerange"
-                range-separator="至"
-                start-placeholder="开始"
-                end-placeholder="结束"
-                value-format="x"
-                style="width: 340px"
-              />
-            </el-form-item>
-
-            <el-form-item>
-              <el-checkbox v-model="filters.overdue" @change="onSearch">仅逾期</el-checkbox>
-              <el-checkbox v-model="filters.importantOnly" @change="onSearch">仅重要</el-checkbox>
-            </el-form-item>
-
-            <el-form-item class="action-buttons">
-              <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
-              <el-button :icon="Refresh" @click="onReset">重置</el-button>
-            </el-form-item>
-          </div>
-
-       
-        </el-form>
-      </div>
-
-      <div class="table-actions" style="margin-bottom: 16px; display: flex; gap: 8px;">
+      <div class="table-actions">
         <el-button type="primary" :icon="Plus" @click="openCreate" :class="{ 'is-active': showInlineCreate }">
           {{ showInlineCreate ? '收起表单' : '新增记录' }}
         </el-button>
@@ -1093,6 +1252,95 @@ onMounted(async () => {
         @update:page-size="onSizeChange"
       />
     </el-card>
+    </div>
+
+    <!-- 全页编辑视图 -->
+    <div v-if="showFullpageEdit" class="fe-card">
+      <div class="fe-header">
+        <div class="fe-header-left">
+          <el-button @click="handleCancelEdit" circle>&#x2190;</el-button>
+          <div class="fe-title">
+            <div>编辑工作记录</div>
+            <div class="fe-subtitle">{{ categoryMap.get(form.categoryId) || '-' }} · {{ deptMap.get(String(form.bizDeptId)) || '-' }}</div>
+          </div>
+        </div>
+        <div class="fe-header-right">
+          <el-button @click="handleCancelEdit">取消</el-button>
+          <el-button type="primary" @click="submit">保存</el-button>
+        </div>
+      </div>
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="fe-form">
+        <div class="fe-section">
+          <div class="fe-section-title">基本信息</div>
+          <div class="fe-row">
+            <el-form-item label="业务科室" class="fe-field">
+              <el-select v-model="form.bizDeptId" clearable filterable placeholder="可选" @change="onBizDeptOrStartChange">
+                <el-option :value="null" label="不指定" />
+                <el-option v-for="d in deptOptions" :key="d.id" :value="d.id" :label="`${d.deptName} (${d.deptCode})`" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="分类" prop="categoryId" class="fe-field">
+              <el-select v-model="form.categoryId" placeholder="请选择分类" @change="onCategoryChange">
+                <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.categoryName" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <div class="fe-row fe-row-compact">
+            <el-form-item label="状态" class="fe-field fe-field-status">
+              <el-select v-model="form.statusId" placeholder="请选择状态">
+                <el-option v-for="s in statusOptions" :key="s.id" :value="s.id" :label="s.statusName" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="重要" class="fe-field fe-field-switch">
+              <el-switch v-model="form.isImportant" :active-value="1" :inactive-value="0" />
+            </el-form-item>
+          </div>
+        </div>
+        <div class="fe-section">
+          <div class="fe-section-title">时间安排</div>
+          <div class="fe-row fe-row-dates">
+            <el-form-item label="开始时间" class="fe-field">
+              <el-date-picker v-model="form.startTime" type="datetime" placeholder="可选" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm" @change="onBizDeptOrStartChange" />
+            </el-form-item>
+            <el-form-item label="截止日期" class="fe-field">
+              <el-date-picker v-model="form.endTime" type="datetime" placeholder="建议填写" value-format="YYYY-MM-DD HH:mm:ss" format="YYYY-MM-DD HH:mm" />
+            </el-form-item>
+          </div>
+        </div>
+        <div class="fe-section">
+          <div class="fe-section-title">工作内容</div>
+          <div class="fe-row">
+            <el-form-item label="标题" prop="title" class="fe-field fe-field-full">
+              <el-input v-model="form.title" placeholder="请输入标题" />
+            </el-form-item>
+          </div>
+          <div class="fe-row">
+            <el-form-item label="内容" class="fe-field fe-field-full">
+              <el-input v-model="form.content" type="textarea" :rows="6" placeholder="可选，支持粘贴图片" @paste="onPaste" />
+            </el-form-item>
+          </div>
+        </div>
+        <div class="fe-section">
+          <div class="fe-section-title">图片附件</div>
+          <div class="fe-row">
+            <el-form-item label="图片" class="fe-field fe-field-full">
+              <div class="fe-images">
+                <el-upload :auto-upload="false" :show-file-list="false" accept="image/*" :on-change="onPickImage">
+                  <el-button :loading="uploading" :disabled="uploading" round plain>上传图片</el-button>
+                </el-upload>
+                <div v-if="previewUrl" class="fe-img-preview">
+                  <el-image :src="previewUrl" class="fe-img" fit="cover" />
+                </div>
+                <div v-for="u in contentImageUrls" :key="u" class="fe-img-wrap">
+                  <el-image :src="signedUrl(u)" class="fe-img" fit="cover" :preview-src-list="signedList(contentImageUrls)" :initial-index="contentImageUrls.indexOf(u)" preview-teleported />
+                  <el-button circle type="danger" :icon="Delete" size="small" class="fe-img-del" @click.stop="deleteImage(u)" />
+                </div>
+              </div>
+            </el-form-item>
+          </div>
+        </div>
+      </el-form>
+    </div>
 
     <el-dialog v-if="editMode === 'edit'"
       v-model="dialogs.edit"
@@ -1276,29 +1524,11 @@ onMounted(async () => {
   border-radius: 14px;
 }
 
-.filter-bar {
-  margin-bottom: 12px;
-}
-
-.filter-form {
+/* --- 表格上方的动作条 --- */
+.table-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-}
-
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-:deep(.filter-form .el-form-item) {
-  margin-bottom: 6px;
-}
-
-.filter-form .action-buttons {
-  margin-top: auto;
-  padding-bottom: 2px;
+  margin-bottom: 14px;
 }
 
 .pagination {
@@ -1563,4 +1793,228 @@ onMounted(async () => {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========================================
+   全页编辑视图
+   ======================================== */
+.fe-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f5f7fb;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: feSlideIn 0.25s ease-out;
+}
+
+@keyframes feSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fe-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+}
+
+.fe-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fe-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.fe-subtitle {
+  font-size: 13px;
+  color: #71717a;
+  margin-top: 2px;
+}
+
+.fe-header-right {
+  display: flex;
+  gap: 8px;
+}
+
+.fe-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 28px;
+}
+
+.fe-form > div {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.fe-section {
+  margin-bottom: 32px;
+}
+
+.fe-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.fe-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.fe-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 紧凑行布局 - 状态 + 重要开关 */
+.fe-row-compact {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.fe-field-status {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.fe-field-switch {
+  display: inline-flex;
+  flex-direction: column;
+  padding-top: 4px;
+}
+
+.fe-field-switch :deep(.el-form-item__content) {
+  margin-top: 4px;
+}
+
+/* 日期选择器行 - 限制宽度 */
+.fe-row-dates {
+  max-width: 640px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.fe-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.fe-field :deep(.el-form-item__label) {
+  font-weight: 500;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.fe-field :deep(.el-form-item__content) {
+  flex: 1;
+}
+
+.fe-field :deep(.el-input__wrapper),
+.fe-field :deep(.el-textarea__inner),
+.fe-field :deep(.el-select .el-input__wrapper) {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #e2e8f0 !important;
+  transition: all 0.2s;
+}
+
+.fe-field :deep(.el-input__wrapper:hover),
+.fe-field :deep(.el-textarea__inner:hover),
+.fe-field :deep(.el-select .el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #cbd5e1 !important;
+}
+
+.fe-field :deep(.el-input__wrapper.is-focus),
+.fe-field :deep(.el-textarea__inner:focus),
+.fe-field :deep(.el-select .el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px #3b82f6 !important;
+}
+
+.fe-field :deep(.el-textarea__inner) {
+  padding: 12px 14px;
+  line-height: 1.6;
+}
+
+.fe-field :deep(.el-select),
+.fe-field :deep(.el-date-editor) {
+  width: 100% !important;
+}
+
+.fe-field-full {
+  grid-column: 1 / -1;
+}
+
+.fe-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.fe-img-preview,
+.fe-img-wrap {
+  position: relative;
+}
+
+.fe-img {
+  width: 100px;
+  height: 100px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.fe-img-del {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 768px) {
+  .fe-header {
+    padding: 14px 16px;
+  }
+  .fe-row-compact {
+    flex-direction: column;
+    gap: 0;
+  }
+  .fe-field-status {
+    width: 100%;
+  }
+  .fe-row-dates {
+    max-width: none;
+    grid-template-columns: 1fr;
+  }
+  .fe-form {
+    padding: 20px 16px;
+  }
+  .fe-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .fe-title {
+    font-size: 16px;
+  }
+}
+
 </style>

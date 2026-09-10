@@ -50,6 +50,30 @@ class PasswordServiceTest {
             return pending.size();
         }
 
+        // 角色体系给 UserMapper 加了 countByRole（保住最后一个管理员的兜底查询），假 Mapper 要一起实现，否则测试编译不过
+        @Override
+        public long countByRole(String role) {
+            return pending.stream().filter(u -> u.getRole() != null && u.getRole().equals(role)).count();
+        }
+
+        // 人员角色设置页新增的三个方法：本测试用不到，按接口要求给最小实现
+        @Override
+        public long countRolePage(String role, Long deptId, String keyword, Integer status) {
+            return pending.size();
+        }
+
+        @Override
+        public java.util.List<com.zjl.worklog.user.dto.UserRoleView> selectRolePage(long offset, long limit,
+                                                                                    String role, Long deptId,
+                                                                                    String keyword, Integer status) {
+            return java.util.List.of();
+        }
+
+        @Override
+        public int updateRole(Long id, String role) {
+            return 1;
+        }
+
         @Override
         public List<UserEntity> selectPage(long offset, long limit, String username, String realName,
                                            Long deptId, List<Long> deptIds, Integer status) {

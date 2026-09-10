@@ -370,7 +370,7 @@ watch(activeTab, (newTab) => {
 .drawer-header__title {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: var(--g-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -378,7 +378,7 @@ watch(activeTab, (newTab) => {
 }
 .drawer-header__sub {
   font-size: 13px;
-  color: #909399;
+  color: var(--g-text-muted);
   margin-top: 4px;
 }
 .tab-content {
@@ -406,3 +406,4 @@ watch(activeTab, (newTab) => {
   white-space: nowrap;
 }
 </style>
+

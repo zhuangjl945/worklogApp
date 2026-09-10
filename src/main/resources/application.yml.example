@@ -27,6 +27,14 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+# 日志：启动默认值。运行期可在管理端「参数配置 → 日志级别」调整，改完立刻生效。
+logging:
+  level:
+    root: INFO
+    com.zjl.worklog: INFO
+    org.mybatis: WARN
+    org.apache.ibatis: WARN
+
 # JWT。密钥不合格应用会拒绝启动（JwtProps 启动期校验），这是有意的。
 # 生成强随机密钥：
 #   PowerShell : -join ((48..57)+(97..122) | Get-Random -Count 48 | ForEach-Object {[char]$_})

@@ -11,6 +11,8 @@ public class TicketChannelEntity {
     private String channelCode;
     private String channelName;
     private Long deptId;
+    /** 问题所在科室（业务科室）；受理科室仍是 deptId */
+    private Long bizDeptId;
     private Long defaultCategoryId;
     private Integer needPhone;
     private Integer dailyLimit;

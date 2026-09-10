@@ -45,46 +45,62 @@ async function onSubmit() {
 
 <template>
   <div class="page">
-    <div class="bg" />
-
-    <div class="shell">
+    <div class="container">
+      <!-- 左侧品牌区 -->
       <div class="brand">
-        <div class="logo">W</div>
-        <div class="brandText">
-          <div class="brandName">Worklog</div>
-          <div class="brandDesc">工作日志管理系统</div>
+        <div class="brandInner">
+          <div class="logoMark">W</div>
+          <h1 class="brandTitle">Worklog</h1>
+          <p class="brandDesc">工作日志管理系统</p>
+          <div class="brandFeatures">
+            <div class="feature">
+              <span class="featureDot"></span>
+              <span>工作记录与分类统计</span>
+            </div>
+            <div class="feature">
+              <span class="featureDot"></span>
+              <span>问题受理与工单流转</span>
+            </div>
+            <div class="feature">
+              <span class="featureDot"></span>
+              <span>合同管理与付款计划</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="title">登录</div>
-        <div class="subtitle">请输入账号与密码继续</div>
+      <!-- 右侧登录表单 -->
+      <div class="formSide">
+        <div class="formCard">
+          <h2 class="formTitle">登录</h2>
+          <p class="formSubtitle">请输入账号与密码继续</p>
 
-        <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
+          <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
 
-        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large" @submit.prevent>
-          <el-form-item label="用户名" prop="username">
-            <el-input v-model="form.username" placeholder="请输入用户名" autocomplete="username" />
-          </el-form-item>
+          <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large" @submit.prevent>
+            <el-form-item label="用户名" prop="username">
+              <el-input v-model="form.username" placeholder="请输入用户名" autocomplete="username" />
+            </el-form-item>
 
-          <el-form-item label="密码" prop="password">
-            <el-input
-              v-model="form.password"
-              placeholder="请输入密码"
-              type="password"
-              show-password
-              autocomplete="current-password"
-              @keyup.enter="onSubmit"
-            />
-          </el-form-item>
+            <el-form-item label="密码" prop="password">
+              <el-input
+                v-model="form.password"
+                placeholder="请输入密码"
+                type="password"
+                show-password
+                autocomplete="current-password"
+                @keyup.enter="onSubmit"
+              />
+            </el-form-item>
 
-          <el-button class="submit" type="primary" :loading="loading" @click="onSubmit">登录</el-button>
-        </el-form>
+            <el-button class="submit" type="primary" :loading="loading" @click="onSubmit">登录</el-button>
+          </el-form>
 
-        <div class="tips">建议使用 Chrome / Edge 浏览器获得更佳体验</div>
+          <div class="tips">建议使用 Chrome / Edge 浏览器</div>
+        </div>
+
+        <div class="footer">© {{ new Date().getFullYear() }} Worklog</div>
       </div>
-
-      <div class="footer">Copyright © {{ new Date().getFullYear() }} Worklog</div>
     </div>
   </div>
 </template>
@@ -93,113 +109,162 @@ async function onSubmit() {
 .page {
   min-height: 100vh;
   width: 100%;
-  position: relative;
+  background: var(--g-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.container {
+  display: flex;
+  width: min(920px, 100%);
+  min-height: 520px;
+  border: 1px solid var(--g-border);
+  border-radius: var(--g-radius-lg);
   overflow: hidden;
+  box-shadow: var(--g-shadow);
 }
 
-.bg {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(900px circle at 20% 10%, rgba(59, 130, 246, 0.28), transparent 55%),
-    radial-gradient(700px circle at 90% 25%, rgba(168, 85, 247, 0.22), transparent 55%),
-    radial-gradient(900px circle at 50% 90%, rgba(34, 197, 94, 0.16), transparent 55%),
-    linear-gradient(180deg, #0b1020, #0b1020 40%, #0a0f1f);
+/* 左侧品牌区 */
+.brand {
+  width: 380px;
+  flex-shrink: 0;
+  background: var(--g-text);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
 }
 
-.shell {
-  min-height: 100vh;
-  width: 100%;
-  position: relative;
+.brandInner {
+  max-width: 280px;
+}
+
+.logoMark {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 22px;
+  margin-bottom: 24px;
+}
+
+.brandTitle {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  margin: 0 0 6px;
+}
+
+.brandDesc {
+  font-size: 14px;
+  color: rgba(255,255,255,0.6);
+  margin: 0 0 40px;
+}
+
+.brandFeatures {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+}
+
+.featureDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+}
+
+/* 右侧表单 */
+.formSide {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 28px 16px;
+  padding: 48px 40px;
+  background: var(--g-bg);
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.92);
+.formCard {
+  width: min(360px, 100%);
 }
 
-.logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  font-weight: 900;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(10px);
+.formTitle {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--g-text);
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
 }
 
-.brandName {
-  font-size: 18px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
-}
-
-.brandDesc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.70);
-}
-
-.card {
-  width: min(420px, 92vw);
-  background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
-  padding: 18px 18px 16px;
-  box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.45),
-    0 1px 0 rgba(255, 255, 255, 0.05) inset;
-  backdrop-filter: blur(14px);
-}
-
-.title {
-  font-size: 18px;
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.subtitle {
-  margin-top: 6px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.70);
-  margin-bottom: 14px;
+.formSubtitle {
+  font-size: 13px;
+  color: var(--g-text-muted);
+  margin: 0 0 28px;
 }
 
 .error {
-  margin: 10px 0 14px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(185, 28, 28, 0.22);
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  color: #fecaca;
-  font-size: 12px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--g-radius);
+  background: var(--g-danger-bg);
+  border: 1px solid #fecaca;
+  color: var(--g-danger);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .submit {
   width: 100%;
-  height: 40px;
+  height: 42px;
   margin-top: 4px;
+  font-size: 14px;
 }
 
 .tips {
-  margin-top: 10px;
+  margin-top: 20px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.60);
+  color: var(--g-text-faint);
+  text-align: center;
 }
 
 .footer {
-  text-align: center;
+  margin-top: 32px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-faint);
+}
+
+/* 响应式 */
+@media (max-width: 720px) {
+  .container {
+    flex-direction: column;
+    min-height: auto;
+  }
+  .brand {
+    width: 100%;
+    padding: 32px 24px;
+  }
+  .brandFeatures {
+    display: none;
+  }
+  .formSide {
+    padding: 32px 24px;
+  }
 }
 </style>

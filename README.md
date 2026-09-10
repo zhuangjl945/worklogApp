@@ -1,435 +1,397 @@
 # 工作日志管理系统
 
-> 一个基于 Spring Boot 和 Vue 3 的企业级工作记录管理平台
+Spring Boot 3 + Vue 3 的企业内部工作记录平台：日常工作记录、任务看板、供应商与合同、以及手机扫码报修（服务工单）。
 
 [![Java](https://img.shields.io/badge/Java-17-orange)](https://www.oracle.com/java/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.10-brightgreen)](https://spring.io/projects/spring-boot)
 [![Vue](https://img.shields.io/badge/Vue-3.5.24-4FC08D)](https://vuejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-## 📋 项目简介
+## 项目简介
 
-工作日志管理系统是一个功能完整的企业级工作记录管理平台，旨在帮助团队高效记录、管理和追踪日常工作内容。系统支持工作记录管理、供应商管理、合同管理、数据统计分析等功能。
+系统按「员工产出」和「外部请求」拆开：工作记录是员工自己的任务与工作量；服务工单是报修人扫码提交的问题，受理后可转成工作记录，再进入看板与统计。
 
-### 主要特性
+身份是三级内置角色（`user.role`），不另建 RBAC 表。权限点可在管理端「只收紧、不放宽」。生产形态是前端 `dist` 与后端同域部署；手机端 H5 走公开路径 `/m/**`，免登录。
 
-- ✅ **工作记录管理**：支持创建、编辑、查询、删除工作记录，支持任务转移
-- ✅ **分类管理**：灵活的工作分类和状态管理，支持按科室分类
-- ✅ **供应商管理**：完整的供应商信息及联系人管理
-- ✅ **合同管理**：合同全生命周期管理，包括付款计划跟踪和到期提醒
-- ✅ **数据统计**：多维度数据报表和可视化分析（ECharts）
-- ✅ **文件管理**：集成阿里云OSS，支持文件上传和管理
-- ✅ **权限控制**：基于JWT的身份认证和权限管理
-- ✅ **科室管理**：支持多级科室树形结构管理
-- ✅ **任务转移**：支持工作任务的转移和审批流程
-- ✅ **费用管理**：记录工作相关费用，支持费用类型分类
+### 主要能力
+
+- **工作记录**：创建 / 编辑 / 查询 / 删除，日志、费用、任务转移与审批
+- **任务看板**：按本人 / 本科室 / 全部科室查看任务（后两档受权限点控制）
+- **工作分类**：按科室维护分类，支持填写模板
+- **服务工单**：扫码免登录登记、受理台流转、转工作记录、报修人凭单号+查询密码看进度
+- **供应商 / 合同**：供应商与联系人、合同生命周期、付款计划与到期提醒
+- **报表**：工作量分类统计（ECharts），跨科室筛选受权限控制
+- **系统管理**：科室树、员工、人员角色、参数配置、权限设置、登记渠道（二维码）
+- **文件**：阿里云 OSS 直传；手机拍照走访客 policy
+- **认证**：JWT；口令 BCrypt（存量明文启动时迁移）
 
 ## 项目截图
 
-<img width="1850" height="970" alt="首页截图" src="https://github.com/user-attachments/assets/595078d2-060e-47b2-a6b8-e13c209a92f7" />
-<img width="1900" height="956" alt="工作记录截图" src="https://github.com/user-attachments/assets/8505accf-d680-4cfa-8896-8b246e17ff2e" />
+登录页
 
-## 🛠 技术栈
+![登录页](docs/screenshots/login.jpg)
 
-### 后端技术
+首页
+
+![首页](docs/screenshots/home.jpg)
+
+工作记录
+
+![工作记录](docs/screenshots/work-records.jpg)
+
+问题受理台
+
+![问题受理台](docs/screenshots/tickets.jpg)
+
+手机端进度查询（免登录）
+
+![手机端进度查询](docs/screenshots/mobile-query.jpg)
+
+## 技术栈
+
+### 后端
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
-| Spring Boot | 3.5.10 | 核心框架 |
-| MyBatis | 3.0.3 | ORM框架 |
-| MySQL | 8.0+ | 数据库 |
-| Spring Security | - | 安全框架 |
-| JWT | 0.11.5 | 身份认证 |
-| Lombok | - | 代码简化 |
-| Maven | 3.6+ | 构建工具 |
-| JDK | 17+ | Java版本 |
+| JDK | 17+ | 运行与编译 |
+| Spring Boot | 3.5.10 | Web / Validation / Security |
+| MyBatis | 3.0.3 | ORM |
+| MySQL | 8.0+ | 数据存储 |
+| JWT (jjwt) | 0.11.5 | 无状态登录 |
+| Maven | 3.6+ | 构建 |
 
-### 前端技术
+### 前端
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
-| Vue | 3.5.24 | 前端框架 |
-| Vite | 7.2.4 | 构建工具 |
-| Element Plus | 2.13.2 | UI组件库 |
-| Vue Router | 4.6.4 | 路由管理 |
-| Axios | 1.13.4 | HTTP客户端 |
-| ECharts | 6.0.0 | 图表库 |
-| XLSX | 0.18.5 | Excel处理 |
+| Vue | 3.5.24 | 管理端 + 手机 H5 |
+| Vite | 7.2.4 | 开发与打包 |
+| Element Plus | 2.13.2 | 管理端 UI |
+| Vue Router | 4.6.4 | History 模式 |
+| Axios | 1.13.4 | 请求；开发态经 Vite 代理 `/api` |
+| ECharts | 6.0.0 | 首页与报表 |
+| XLSX | 0.18.5 | Excel 导出 |
 
-## 📦 环境要求
+## 环境要求
 
-### 开发环境
+- JDK 17+
+- Node.js 20+（Vite 7）
+- Maven 3.6+
+- MySQL 8.0+
+- 使用附件时：阿里云 OSS Bucket 与 AccessKey
 
-- **JDK**: 17 或更高版本
-- **Node.js**: 16.x 或更高版本
-- **Maven**: 3.6+
-- **MySQL**: 8.0 或更高版本
-- **IDE**: IntelliJ IDEA / VS Code（推荐）
+## 快速开始
 
-### 生产环境
-
-- **服务器**: Linux/Windows Server
-- **Java运行环境**: JDK 17+
-- **数据库**: MySQL 8.0+
-- **Web服务器**: Nginx（可选，用于前端静态资源）
-
-## 🚀 快速开始
-
-### 1. 克隆项目
+### 1. 克隆
 
 ```bash
 git clone https://github.com/zhuangj1945/worklogApp.git
 cd worklogApp
 ```
 
-### 2. 数据库配置
-
-#### 2.1 创建数据库
+### 2. 建库并执行脚本
 
 ```sql
-CREATE DATABASE work_log_system DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS work_log_system
+  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-#### 2.2 执行SQL脚本
-
-依次执行项目中的SQL脚本文件：
+`work_record_module.sql` 里也会 `CREATE DATABASE IF NOT EXISTS`。其余脚本假定库已存在，按顺序执行：
 
 ```bash
-# 工作记录模块
+# 用户、科室、工作记录 / 分类 / 状态 / 日志 / 费用 / 转移
 mysql -u root -p work_log_system < src/main/resources/db/work_record_module.sql
 
-# 合同模块
+# 工作分类填写模板列（已有库升级时执行）
+mysql -u root -p work_log_system < src/main/resources/db/work_category_template.sql
+
+# 供应商、合同、付款计划
 mysql -u root -p work_log_system < src/main/resources/db/contract_module.sql
+
+# 系统参数（含工单表单规则、限流、流转等预置项）
+mysql -u root -p work_log_system < src/main/resources/db/sys_config_module.sql
+
+# user.role 列；启动时 UserRoleMigrationRunner 也会补列并把 username=admin 升为 ADMIN
+mysql -u root -p work_log_system < src/main/resources/db/user_role_module.sql
+
+# 权限点种子（可选；未执行则按代码内置下限运行）
+mysql -u root -p work_log_system < src/main/resources/db/permission_module.sql
+
+# 登记渠道、服务工单、工单流转日志
+mysql -u root -p work_log_system < src/main/resources/db/service_ticket_module.sql
 ```
 
-#### 2.3 配置数据库连接
+脚本均无外键，表之间是逻辑关联。
 
-复制配置模板并修改：
+### 3. 后端配置
+
+仓库里的 `application.yml` 可能被忽略或不适合本机。复制模板：
 
 ```bash
 cp src/main/resources/application.yml.example src/main/resources/application.yml
 ```
 
-编辑 `src/main/resources/application.yml`：
+至少配置：
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/work_log_system?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
-    username: root
-    password: your_password  # 修改为你的数据库密码
-    driver-class-name: com.mysql.cj.jdbc.Driver
+| 项 | 说明 |
+|----|------|
+| `spring.datasource.*` | 本机开发建议 `127.0.0.1`。不要用本机公网 IP 回连 MySQL（云安全组常丢这种流量） |
+| `MYSQL_PROD_USER` / `MYSQL_PROD_PASS` | 数据库账号 |
+| `JWT_SECRET` | **必填**，≥32 字节随机串；不合格会直接拒绝启动（`JwtProps`） |
+| `ALIYUN_OSS_ACCESS_KEY_ID` / `SECRET` | 上传附件时必填 |
+| `cors.allowed-origins` | 留空 = 只允许同源（当前推荐）。H5 与 API 不同域时再配 |
+
+生成 JWT 密钥：
+
+```powershell
+# PowerShell
+-join ((48..57)+(97..122) | Get-Random -Count 48 | ForEach-Object {[char]$_})
 ```
-
-### 3. 配置JWT密钥
-
-编辑 `src/main/resources/application.yml`，修改JWT密钥：
-
-```yaml
-jwt:
-  secret: "your-long-random-secret-key-at-least-32-bytes"  # 修改为强随机字符串
-  expire-seconds: 7200
-```
-
-### 4. 配置阿里云OSS（可选）
-
-如果需要使用文件上传功能，配置阿里云OSS：
-
-```yaml
-aliyun:
-  oss:
-    endpoint: oss-cn-hangzhou.aliyuncs.com
-    bucket: your-bucket-name
-    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
-    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
-    dir-prefix: work-records/
-```
-
-通过环境变量设置：
 
 ```bash
-# Windows
-set ALIYUN_OSS_ACCESS_KEY_ID=your_access_key_id
-set ALIYUN_OSS_ACCESS_KEY_SECRET=your_access_key_secret
-
-# Linux/macOS
-export ALIYUN_OSS_ACCESS_KEY_ID=your_access_key_id
-export ALIYUN_OSS_ACCESS_KEY_SECRET=your_access_key_secret
+# Linux / macOS
+openssl rand -base64 48
 ```
 
-### 5. 启动后端服务
+经 Nginx 反代时保持 `server.forward-headers-strategy: framework`，后端只监听本机，由 Nginx 对外；否则客户端可伪造 `X-Forwarded-For` 绕过手机端 IP 限流。
+
+### 4. 启动后端
 
 ```bash
-# 方式一：使用Maven运行
 mvn spring-boot:run
-
-# 方式二：打包后运行
+# 或
 mvn clean package
 java -jar target/worklog-0.0.1-SNAPSHOT.jar
 ```
 
-后端服务默认运行在：`http://localhost:8080`
+默认 `http://localhost:8080`。
 
-### 6. 启动前端服务
+### 5. 启动前端（开发）
 
 ```bash
-# 进入前端目录
 cd web
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-前端服务默认运行在：`http://localhost:5173`
+默认 `http://localhost:5173`。`/api` 由 Vite 代理到 `8080`。开发机需被手机访问时，`vite.config.js` 已 `host: true`；渠道二维码会尽量写成局域网 IP，避免码里出现 `localhost`。
 
-### 7. 访问系统
+### 6. 首次登录
 
-打开浏览器访问：`http://localhost:5173`
+脚本**不会**插入管理员账号。在 `user` 表插入一条记录，`username` 建议为 `admin`（启动迁移会把它升为 `ADMIN`）。口令可先写明文，`PasswordMigrationRunner` / 登录路径会升级为 `{bcrypt}`。
 
-默认需要先创建管理员账户（通过数据库直接插入或使用初始化脚本）。
+管理端：`http://localhost:5173/login`  
+手机登记：`http://localhost:5173/m/{渠道编码}`（需先在「登记渠道维护」建渠道）  
+进度查询：`http://localhost:5173/m/query`
 
-## 📖 功能模块
+## 功能模块
 
-### 1. 用户认证与权限管理
+侧栏与路由一致。菜单隐藏只是体验层，接口仍由服务端收口。
 
-- 用户登录（JWT Token认证）
-- 用户信息管理
-- 用户状态管理（启用/禁用）
-- 密码重置功能
+### 首页 `/home`
 
-### 2. 工作记录管理
+今日待办、进行中任务、合同/付款到期提醒、工作量与费用图表。
 
-- **工作记录**：创建、编辑、查询、删除工作记录
-- **工作分类**：按科室管理分类，支持分类的增删改查
-- **工作状态**：预定义工作状态管理
-- **工作日志**：记录工作处理详情
-- **工作费用**：记录工作相关费用
-- **任务转移**：支持任务转移申请和审批
+### 看板 `/board`
 
-### 3. 供应商管理
+按范围看任务；「本科室」「全部科室」分别对应权限点 `board.scopeDept`、`board.scopeAll`。本科室他人记录能否编辑由 `record.editDeptOthers` 决定，删除始终仅本人。
 
-- 供应商基本信息管理
-- 供应商编码自动生成
-- 供应商联系人管理
-- 供应商状态管理
+### 工作记录 `/work-records`
 
-### 4. 合同管理
+记录 CRUD、分类与状态、处理日志、费用、任务转移。分类可带新建模板。
 
-- 合同信息管理（采购、销售、服务等类型）
-- 付款计划管理
-- 合同状态流转（启动、完成、终止、续签）
-- 合同到期提醒
-- 付款计划到期提醒
+### 问题受理（服务工单）
 
-### 5. 数据统计与报表
+| 页面 | 路径 | 说明 |
+|------|------|------|
+| 问题受理台 | `/tickets` | 待办、派单、回复、完成、退回、归档；可转工作记录 |
+| 工单处理 | `/tickets/:id` | 详情（不进侧栏） |
+| 登记渠道 | `/ticket-channels` | 一码一渠道，绑定受理科室；停用后旧码立即失效 |
+| 手机登记 | `/m/:channelCode` | 免登录；form token + 多维限流 + 蜜罐 |
+| 进度查询 | `/m/query`、`/m/ticket/:ticketNo` | 单号 + 自设 6 位查询密码 |
 
-- 工作负荷统计（按分类、用户、科室）
-- 费用统计（按费用类型）
-- 数据可视化展示（ECharts图表）
+状态由代码枚举固定（不做可编辑字典）：待受理 → 处理中 → 待报修人确认 → 已完成 / 已关闭 / 已退回。报修人超时未确认可由定时任务自动确认（参数配置「工单流转」，默认 8 小时）。工单受理与流转的角色门槛是权限点 `ticket.manage`（内置下限 USER，可调高）。
 
-### 6. 科室管理
+### 供应商与合同
 
-- 多级科室树形结构
-- 科室的增删改查
-- 科室状态管理
+供应商编码、联系人；合同类型与状态流转（启动 / 完成 / 终止 / 续签）、付款计划、到期提醒。选负责人走 `GET /api/users/roster`（仅 id / 用户名 / 姓名 / 科室），不是员工管理分页接口。
 
-## 📁 项目结构
+### 报表 `/reports/workload-category`
+
+按分类、用户、科室统计工作量。跨科室筛选：`report.deptCross`。
+
+### 系统管理
+
+| 页面 | 最低角色（可再收紧） | 说明 |
+|------|----------------------|------|
+| 科室管理 | ADMIN | 多级树 |
+| 员工管理 | ADMIN | 账号增删改、启用停用；不能改自己的角色/状态；系统至少保留一名启用 ADMIN |
+| 人员角色设置 | ADMIN | 行内改角色、批量授予；改完对方需重新登录 |
+| 工作分类维护 | DEPT_ADMIN | 分类与模板 |
+| 登记渠道维护 | DEPT_ADMIN | 二维码 |
+| 参数配置 | ADMIN | `sys_config`（上传、限流、工单表单与流转等）；不含 permission 分组 |
+| 权限设置 | ADMIN（固定） | 见下一节 |
+
+## 角色与权限
+
+三级角色存在 `user.role`，随 JWT 签发；**改角色需对方重新登录**。`GET /api/auth/me` 的 `roleStale` 用于提示旧 token。无 role claim 的旧 token 一律按 `USER`。
+
+| 能力 | USER | DEPT_ADMIN | ADMIN |
+|------|------|------------|-------|
+| 本人工作记录 | 读写 | 读写 | 读写 |
+| 本科室工作记录 | 只读（看板「本科室」） | 默认可改他人、不可删除 | 可改他人 |
+| 跨科室（看板「全部」、报表选科室） | ✗ | ✗ | ✓ |
+| 工作分类 / 登记渠道 | 只读 | 可维护 | 可维护 |
+| 科室 / 员工与角色 / 参数 / 权限页 | ✗ | ✗ | ✓ |
+
+两层收口不要混用：
+
+1. **接口门槛**：`@RequireRole(最低角色)`，语义是「不低于」；可再挂 `permission`。不写注解 = 任意登录用户。公开接口只有登录、静态资源、`/m/**`、`/api/public/**`。
+2. **数据行级**：`DataScope` 判断这条记录能不能看 / 改。常见模式：读放宽、写收紧。
+
+「权限设置」只调整**已经存在的收口点**要多高的角色，不能凭空开门。每个权限点有内置下限 `floor`，配置更松会被 `clamp()` 抬回，响应里的 `adjusted` 会标明。存储复用 `sys_config`（`config_group = permission`）。读库失败回落内置下限。改完服务端立即生效，其他人已打开的页面需刷新。
+
+| 权限点 | 内置下限 | 控制内容 |
+|--------|----------|----------|
+| `user.manage` | ADMIN | 员工与角色 |
+| `dept.manage` | ADMIN | 科室 |
+| `sysConfig.manage` | ADMIN | 参数配置 |
+| `permission.manage` | ADMIN（不可调） | 权限设置本身 |
+| `workCategory.manage` | DEPT_ADMIN | 工作分类 |
+| `ticketChannel.manage` | DEPT_ADMIN | 登记渠道 |
+| `ticket.manage` | USER | 工单受理与流转、转工作记录 |
+| `board.scopeDept` | USER | 看板/列表「本科室」 |
+| `board.scopeAll` | ADMIN | 「全部科室」 |
+| `report.deptCross` | ADMIN | 报表跨科室 |
+| `record.editDeptOthers` | DEPT_ADMIN | 编辑本科室他人记录 |
+
+清单以 `security/Permission.java` 为准。前端用 `web/src/utils/auth.js` 的 `can(权限点, [内置下限])` 画菜单和按钮；配置拉失败时退回声明的下限。
+
+相关接口：`GET /api/permissions`（登录可读）、`PUT /api/permissions`、`POST /api/permissions/reset`。角色接口：`GET /api/users/role-page`、`GET /api/users/role-summary`、`PUT /api/users/{id}/role`、`PUT /api/users/roles/batch`。保护逻辑在 `UserRoleGuard`。
+
+不变量单测：`PermissionTest`、`DataScopeTest`、`UserRoleGuardTest`，以及工单相关 `Ticket*Test`。改枚举后若测试报数量不一致，同步本节表格。
+
+```bash
+mvn test
+```
+
+## 项目结构
 
 ```
 worklog/
-├── src/main/java/com/zjl/worklog/    # 后端Java代码
-│   ├── auth/                          # 认证模块
-│   ├── common/                        # 公共模块（异常处理、响应封装）
-│   ├── contract/                      # 合同模块
-│   ├── dept/                          # 科室模块
-│   ├── oss/                           # 文件上传模块
-│   ├── security/                      # 安全配置
-│   ├── supplier/                      # 供应商模块
-│   ├── user/                          # 用户模块
-│   └── work/                          # 工作记录模块
-├── src/main/resources/                # 资源文件
-│   ├── application.yml                # 应用配置（需复制模板）
-│   ├── application.yml.example       # 配置模板
-│   ├── db/                            # 数据库脚本
-│   └── mapper/                        # MyBatis映射文件
-├── web/                               # 前端项目
-│   ├── src/
-│   │   ├── api/                       # API接口
-│   │   ├── components/                # 组件
-│   │   ├── router/                    # 路由配置
-│   │   ├── stores/                    # 状态管理
-│   │   └── views/                     # 页面视图
-│   └── package.json
-└── pom.xml                            # Maven配置
+├── docs/screenshots/                  # README 截图
+├── src/main/java/com/zjl/worklog/
+│   ├── auth/                          # 登录、/auth/me
+│   ├── common/                        # 统一响应与异常
+│   ├── config/                        # 系统参数 sys_config
+│   ├── contract/                      # 合同
+│   ├── dept/                          # 科室
+│   ├── oss/                           # OSS 直传、签名 URL、访客 policy
+│   ├── security/                      # JWT、角色、权限、CORS、SPA 兜底、口令迁移
+│   ├── supplier/                      # 供应商
+│   ├── ticket/                        # 服务工单、公开登记、渠道、限流、定时确认
+│   ├── user/                          # 员工与角色
+│   └── work/                          # 工作记录、分类、看板统计
+├── src/main/resources/
+│   ├── application.yml.example        # 配置模板
+│   ├── db/                            # 分模块 SQL
+│   └── mapper/                        # MyBatis XML
+├── src/test/java/                     # 权限、工单、口令等单测
+├── web/
+│   ├── src/api/                       # 接口封装（baseURL 为 /api）
+│   ├── src/components/
+│   ├── src/router/                    # 管理端 + /m 公开路由
+│   ├── src/utils/                     # 权限、OSS、工单表单校验等
+│   └── src/views/                     # 管理端页面；views/m 为手机 H5
+└── pom.xml
 ```
 
-## 🔧 配置说明
+Vue Router 为 History 模式。同进程托管前端时，`SpaFallbackController` 把无后缀路径转到 `index.html`，`/api/**` 不会被当成页面。前端由 Nginx 单独发布时，history 回退应在 Nginx 配置。
 
-### 后端配置
+## 配置要点
 
-主要配置文件：`src/main/resources/application.yml`
+模板：`src/main/resources/application.yml.example`。敏感项只走环境变量。
 
 ```yaml
 server:
-  port: 8080  # 服务端口
+  port: 8080
+  forward-headers-strategy: framework
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/work_log_system
-    username: root
-    password: your_password
+    url: jdbc:mysql://127.0.0.1:3306/work_log_system?...
+    username: ${MYSQL_PROD_USER:}
+    password: ${MYSQL_PROD_PASS:}
+  servlet:
+    multipart:
+      max-file-size: 5MB          # 生产可按拍照原图调大；参数配置页也可调
+      max-request-size: 30MB
 
 jwt:
-  secret: "your-secret-key"  # JWT密钥，建议至少32字符
-  expire-seconds: 7200  # Token过期时间（秒）
+  secret: ${JWT_SECRET:}          # 必填，启动校验
+  expire-seconds: 28800           # 8 小时；过期前端 401 回登录
 
-aliyun:
-  oss:
-    endpoint: oss-cn-hangzhou.aliyuncs.com
-    bucket: your-bucket-name
-    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
-    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
+aliyun.oss:                       # AccessKey 仅环境变量
+ticket.rate:                      # 手机登记防刷；也可被 sys_config 覆盖
+logging.level:                    # 启动默认 INFO；运行期在「参数配置 → 日志级别」改，立刻生效
 ```
 
-### 前端配置
+前端开发不写死后端绝对地址。生产同域时继续用相对路径 `/api`。
 
-前端API基础URL配置在 `web/src/api/http.js` 中：
+## 常见问题
 
-```javascript
-const baseURL = 'http://localhost:8080/api'
-```
+**数据库连不上**  
+确认 MySQL 已启动、库名与账号正确。应用与库同机时用 `127.0.0.1`，不要用公网 IP 回连。
 
-生产环境需要修改为实际的后端服务地址。
+**启动失败：jwt.secret 未配置**  
+设置 `JWT_SECRET`（≥32 字符，且不能是 `change-me` 前缀）。
 
-## 🐛 常见问题
+**Token 过期**  
+默认 8 小时。可改 `jwt.expire-seconds` 或参数配置里的登录有效期；改完需重新登录。
 
-### 1. 数据库连接失败
+**前端调不到后端**  
+开发：后端 8080、前端 5173，代理 `/api`。生产：同域或配置 `CORS_ALLOWED_ORIGINS`。看浏览器控制台与 Network。
 
-**问题**：启动后端时提示数据库连接失败
+**直接打开 `/work-records` 或 `/m/xxx` 404**  
+History 路由需要 SPA 回退（后端 `SpaFallbackController` 或 Nginx `try_files`）。
 
-**解决方案**：
-- 检查MySQL服务是否启动
-- 确认数据库名称、用户名、密码是否正确
-- 检查数据库用户是否有足够权限
-- 确认数据库时区设置
+**上传失败**  
+检查 OSS 环境变量、Bucket、权限与网络。手机原图较大时确认 multipart 与参数配置中的体积上限。
 
-### 2. JWT Token过期
+**改了角色菜单没变**  
+对方必须重新登录。权限点改完，已打开页面刷新一次。
 
-**问题**：登录后一段时间提示Token过期
+**找不到主类 `WorklogApplication`**
 
-**解决方案**：
-- 重新登录获取新Token
-- 或修改 `application.yml` 中的 `jwt.expire-seconds` 增加过期时间
-
-### 3. 前端无法连接后端
-
-**问题**：前端页面无法获取数据
-
-**解决方案**：
-- 检查后端服务是否正常启动
-- 确认前端API配置的baseURL是否正确
-- 检查CORS配置
-- 查看浏览器控制台错误信息
-
-### 4. 文件上传失败
-
-**问题**：上传文件到OSS失败
-
-**解决方案**：
-- 检查阿里云OSS配置是否正确
-- 确认AccessKey和SecretKey是否有效
-- 检查OSS Bucket是否存在且有权限
-- 确认网络连接正常
-
-### 5. 编译错误：找不到主类
-
-**问题**：`ClassNotFoundException: com.zjl.worklog.WorklogApplication`
-
-**解决方案**：
 ```bash
-# 重新编译项目
-mvn clean compile
-
-# 或完整构建
 mvn clean package
 ```
 
-## 🔒 安全建议
+## 安全建议
 
-1. **生产环境配置**
-   - 修改默认JWT密钥为强随机字符串
-   - 使用环境变量管理敏感配置
-   - 启用HTTPS
-   - 配置防火墙规则
+- 生产用环境变量提供 JWT、数据库、OSS；不要把真实 `application.yml` 提交进库
+- 后端若信任转发头，只应监听本机并由反向代理对外
+- 公开登记接口依赖限流与一次性 form token，不要把渠道密钥打进二维码
+- 定期备份 MySQL；依赖保持更新
 
-2. **数据库安全**
-   - 使用强密码
-   - 限制数据库访问IP
-   - 定期备份数据库
-   - 启用数据库审计
+## 开发约定
 
-3. **应用安全**
-   - 定期更新依赖包
-   - 实施输入验证和SQL注入防护
-   - 配置CORS策略
-   - 实施访问日志记录
+- 后端统一 `ApiResponse`；业务错误走全局异常处理
+- 新增前端一级路径时，确认 Security 放行列表（公开页）或登录守卫（管理页）
+- 新增权限点：改 `Permission` 枚举、权限页会自动列出，并补单测数量
+- 提交说明建议：`feat` / `fix` / `docs` / `refactor` / `test` / `chore`
 
-## 📝 开发指南
-
-### 代码规范
-
-- 遵循Java编码规范
-- 使用Lombok简化代码
-- 统一异常处理
-- API响应统一格式
-
-### 提交规范
-
-推荐使用约定式提交：
-
-- `feat`: 新功能
-- `fix`: 修复bug
-- `docs`: 文档更新
-- `style`: 代码格式调整
-- `refactor`: 代码重构
-- `test`: 测试相关
-- `chore`: 构建/工具相关
-
-示例：
 ```bash
-git commit -m "feat: 添加工作记录导出功能"
-git commit -m "fix: 修复合同状态更新bug"
+git commit -m "feat: 工单超时自动确认"
 ```
 
-## 📄 许可证
+## 许可证与反馈
 
-本项目采用 [MIT License](LICENSE) 许可证。
+[MIT License](LICENSE)。问题与建议请提 [Issue](https://github.com/zhuangj1945/worklogApp/issues)。
 
-## 👥 贡献
+## 现状摘要（相对早期版本）
 
-欢迎提交Issue和Pull Request！
-
-## 📞 联系方式
-
-如有问题或建议，请通过以下方式联系：
-
-- 提交 [Issue](https://github.com/zhuangj1945/worklogApp/issues)
-- 发送邮件
-
-## 🔄 更新日志
-
-### v0.0.1-SNAPSHOT
-
-- 初始版本发布
-- 实现基础工作记录管理功能
-- 实现供应商管理功能
-- 实现合同管理功能
-- 实现数据统计报表功能
-- 集成阿里云OSS文件上传
-
----
-
-**注意**：本文档会持续更新，请关注最新版本。
+当前代码已包含：三级角色与可配置权限、系统参数页、服务工单（手机 H5 + 受理台 + 渠道二维码）、口令 BCrypt 与 JWT 启动校验、CORS 白名单、工单限流与自动确认。版本号仍为 `0.0.1-SNAPSHOT`。

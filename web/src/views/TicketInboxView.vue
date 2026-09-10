@@ -80,6 +80,14 @@ function shiftScope(scope) {
   load()
 }
 
+// 紧急程度 tag 颜色：code 越小越紧急
+function urgencyTagType(code) {
+  if (code <= 1) return 'danger'
+  if (code === 2) return 'warning'
+  if (code === 3) return ''
+  return 'info'
+}
+
 function statusTagType(code) {
   if (code === 0) return 'danger'
   if (code === 10 || code === 20) return 'warning'
@@ -103,6 +111,13 @@ function fmtSpan(minutes) {
 
 function overdue(row) {
   return row.slaRemainMinutes != null && row.slaRemainMinutes < 0 && [0, 10, 20].includes(row.status)
+}
+
+/** 状态列下补一行「多久后自动确认」，受理人才能解释这条待确认单不会一直挂着 */
+function autoConfirmText(row) {
+  if (row.status !== 20 || row.autoConfirmRemainMinutes == null) return ''
+  const m = row.autoConfirmRemainMinutes
+  return m <= 0 ? '即将自动确认' : `${fmtSpan(m)}后自动确认`
 }
 
 function open(row) {
@@ -138,7 +153,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     </div>
 
     <el-table v-loading="loading" :data="rows" row-key="id" size="small" border @row-dblclick="open">
-      <el-table-column label="单号" width="172">
+      <!-- 短流水号只有 8 位（ST100001），老号 14 位：120 级别宽度够放等宽字体的老号 -->
+        <el-table-column label="单号" width="128">
         <template #default="{ row }">
           <span :class="{ 'ov': overdue(row) }">{{ row.ticketNo }}</span>
         </template>
@@ -146,6 +162,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       <el-table-column label="状态" width="118">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.status)" size="small" disable-transitions>{{ row.statusName }}</el-tag>
+          <div v-if="autoConfirmText(row)" class="auto-confirm">{{ autoConfirmText(row) }}</div>
         </template>
       </el-table-column>
       <el-table-column label="SLA" width="120">
@@ -156,10 +173,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       <el-table-column prop="title" label="问题" min-width="230" show-overflow-tooltip>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="open(row)">{{ row.title }}</el-link>
-          <span v-if="row.urgency === 1"> <el-tag type="danger" size="small" effect="plain">急</el-tag></span>
+          <el-tag v-if="row.urgencyName" :type="urgencyTagType(row.urgency)" size="small" effect="plain">{{ row.urgencyName }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="categoryName" label="类型" width="110" show-overflow-tooltip />
+      <el-table-column prop="bizDeptName" label="问题科室" width="120" show-overflow-tooltip />
       <el-table-column prop="location" label="地点" width="130" show-overflow-tooltip />
       <el-table-column label="报修人" width="130">
         <template #default="{ row }">
@@ -232,6 +250,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .phone {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.auto-confirm {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--el-color-warning-dark-2);
 }
 
 .muted {

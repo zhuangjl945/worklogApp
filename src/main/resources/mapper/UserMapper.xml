@@ -11,6 +11,7 @@
         <result column="password" property="password"/>
         <result column="real_name" property="realName"/>
         <result column="dept_id" property="deptId"/>
+        <result column="role" property="role"/>
         <result column="status" property="status"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -40,14 +41,14 @@
     </sql>
 
     <select id="selectByUsername" resultMap="UserEntityMap">
-        SELECT id, username, password, real_name, dept_id, status, create_time, update_time
+        SELECT id, username, password, real_name, dept_id, role, status, create_time, update_time
         FROM user
         WHERE username = #{username}
         LIMIT 1
     </select>
 
     <select id="selectById" resultMap="UserEntityMap">
-        SELECT id, username, password, real_name, dept_id, status, create_time, update_time
+        SELECT id, username, password, real_name, dept_id, role, status, create_time, update_time
         FROM user
         WHERE id = #{id}
         LIMIT 1
@@ -55,7 +56,7 @@
 
     <!-- 明文口令识别：哈希一律带 {id} 前缀，无前缀即为待迁移的存量明文 -->
     <select id="selectNeedPasswordUpgrade" resultMap="UserEntityMap">
-        SELECT id, username, password, real_name, dept_id, status, create_time, update_time
+        SELECT id, username, password, real_name, dept_id, role, status, create_time, update_time
         FROM user
         WHERE password IS NOT NULL
           AND password &lt;&gt; ''
@@ -69,7 +70,7 @@
     </select>
 
     <select id="selectPage" resultMap="UserEntityMap">
-        SELECT id, username, password, real_name, dept_id, status, create_time, update_time
+        SELECT id, username, password, real_name, dept_id, role, status, create_time, update_time
         FROM user
         <include refid="UserWhere"/>
         ORDER BY id DESC
@@ -77,15 +78,66 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO user (username, password, real_name, dept_id, status)
-        VALUES (#{username}, #{password}, #{realName}, #{deptId}, #{status})
+        INSERT INTO user (username, password, real_name, dept_id, role, status)
+        VALUES (#{username}, #{password}, #{realName}, #{deptId}, #{role}, #{status})
     </insert>
+
+    <!-- 统计某角色的人数：用于「最后一个启用管理员不能被降级/禁用」的自我保护 -->
+    <select id="countByRole" resultType="long">
+        SELECT COUNT(1)
+        FROM user
+        WHERE role = #{role}
+          AND status = 1
+    </select>
+
+    <!-- 人员角色设置页的筛选条件：角色/科室/关键字（用户名或姓名）/状态 -->
+    <sql id="RolePageWhere">
+        <where>
+            <if test="role != null and role != ''">AND u.role = #{role}</if>
+            <if test="deptId != null">AND u.dept_id = #{deptId}</if>
+            <if test="status != null">AND u.status = #{status}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (u.username LIKE CONCAT('%', #{keyword}, '%') OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="countRolePage" resultType="long">
+        SELECT COUNT(1)
+        FROM user u
+        <include refid="RolePageWhere"/>
+    </select>
+
+    <!-- 排序按角色权重：管理员、科室管理员排在前面，方便一眼看清「谁有权」 -->
+    <select id="selectRolePage" resultType="com.zjl.worklog.user.dto.UserRoleView">
+        SELECT u.id            AS id,
+               u.username      AS username,
+               u.real_name     AS realName,
+               u.dept_id       AS deptId,
+               d.dept_name     AS deptName,
+               u.role          AS role,
+               u.status        AS status,
+               u.update_time   AS updateTime
+        FROM user u
+        LEFT JOIN dept d ON d.id = u.dept_id
+        <include refid="RolePageWhere"/>
+        ORDER BY FIELD(u.role, 'ADMIN', 'DEPT_ADMIN', 'USER'), u.dept_id, u.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 只动 role 列：update_time 由 MySQL 的 ON UPDATE 自动刷新，页面据此核对「刚才真改成了」 -->
+    <update id="updateRole">
+        UPDATE user
+        SET role = #{role}
+        WHERE id = #{id}
+    </update>
 
     <update id="update">
         UPDATE user
         <set>
             <if test="realName != null">real_name = #{realName},</if>
             <if test="deptId != null">dept_id = #{deptId},</if>
+            <if test="role != null and role != ''">role = #{role},</if>
             <if test="status != null">status = #{status},</if>
         </set>
         WHERE id = #{id}

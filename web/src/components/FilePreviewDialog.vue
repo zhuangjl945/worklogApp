@@ -1,47 +1,107 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ossPreviewUrl } from '../api/work'
+import { ossPreviewFile } from '../api/work'
 
 const visible = ref(false)
 const loading = ref(false)
 const kind = ref('')
 const src = ref('')
 const filename = ref('')
-const previewable = ref(false)
 
 const title = computed(() => filename.value || '附件预览')
+
+function revokeSrc() {
+  if (src.value && src.value.startsWith('blob:')) {
+    URL.revokeObjectURL(src.value)
+  }
+  src.value = ''
+}
+
+function kindFromMime(type) {
+  const t = (type || '').toLowerCase()
+  if (t.includes('pdf')) return 'pdf'
+  if (t.startsWith('image/')) return 'image'
+  if (t.includes('word') || t.includes('officedocument') || t.includes('msword')) return 'office'
+  return 'other'
+}
+
+function kindFromBytes(bytes) {
+  if (!bytes || bytes.length < 4) return ''
+  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) return 'pdf'
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image'
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image'
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image'
+  if (bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) return 'office'
+  if (bytes[0] === 0x50 && bytes[1] === 0x4B) return 'office'
+  return ''
+}
+
+async function detectKind(blob) {
+  const fromMime = kindFromMime(blob.type)
+  if (fromMime === 'pdf' || fromMime === 'image' || fromMime === 'office') return fromMime
+  const buf = await blob.slice(0, 16).arrayBuffer()
+  return kindFromBytes(new Uint8Array(buf)) || fromMime
+}
+
+async function blobFromError(blob) {
+  const text = await blob.text()
+  try {
+    const json = JSON.parse(text)
+    if (json && typeof json.msg === 'string' && json.msg) return json.msg
+  } catch {
+    /* 非 JSON */
+  }
+  return text || '打开预览失败'
+}
+
+function downloadBlob(blob, name) {
+  const u = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = u
+  a.download = name || '附件'
+  a.click()
+  URL.revokeObjectURL(u)
+}
 
 async function open(url) {
   if (!url) {
     ElMessage.warning('没有可预览的文件')
     return
   }
-  loading.value = true
+  revokeSrc()
   kind.value = ''
-  src.value = ''
   filename.value = ''
-  previewable.value = false
   visible.value = true
+  loading.value = true
   try {
-    const resp = await ossPreviewUrl({ url })
-    const d = resp.data || {}
-    kind.value = d.kind || 'other'
-    src.value = d.url || ''
-    filename.value = d.filename || ''
-    previewable.value = !!d.previewable
-    if (!d.previewable) {
+    const resp = await ossPreviewFile(url)
+    const blob = resp.data
+    const mime = (blob?.type || '').toLowerCase()
+    if (!blob || blob.size === 0) {
+      throw new Error('文件为空')
+    }
+    if (mime.includes('json') || mime.includes('text')) {
+      throw new Error(await blobFromError(blob))
+    }
+    const k = await detectKind(blob)
+    kind.value = k
+    filename.value = '附件预览'
+    if (k !== 'pdf' && k !== 'image') {
       visible.value = false
-      if (d.kind === 'office') {
+      if (k === 'office') {
         ElMessage.info('Word 文档无法在浏览器中预览，已开始下载')
       } else {
         ElMessage.info('该文件无法在线预览，已开始下载')
       }
-      if (d.url) window.open(d.url, '_blank', 'noopener')
+      downloadBlob(blob, k === 'office' ? '附件.docx' : '附件')
+      return
     }
+    src.value = URL.createObjectURL(blob)
   } catch (e) {
     visible.value = false
-    ElMessage.error(e?.message || '打开预览失败')
+    const msg = e?.message || '打开预览失败'
+    ElMessage.error(msg === 'Request failed with status code 401' ? '未登录或登录已过期' : msg)
   } finally {
     loading.value = false
   }
@@ -50,6 +110,10 @@ async function open(url) {
 function openInNewTab() {
   if (src.value) window.open(src.value, '_blank', 'noopener')
 }
+
+watch(visible, (v) => {
+  if (!v) revokeSrc()
+})
 
 defineExpose({ open })
 </script>
@@ -61,8 +125,8 @@ defineExpose({ open })
     class="file-preview-dialog"
     width="92vw"
     top="4vh"
-    destroy-on-close
     append-to-body
+    @closed="revokeSrc"
   >
     <div v-loading="loading" class="viewer">
       <iframe v-if="kind === 'pdf' && src" class="frame" :src="src" title="PDF 预览" />

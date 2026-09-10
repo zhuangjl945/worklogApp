@@ -1,12 +1,14 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tickets } from '@element-plus/icons-vue'
+import { Search, Tickets } from '@element-plus/icons-vue'
 import { contractDelete, contractPage, contractStart, contractComplete, contractTerminate, contractRenew } from '../api/contract'
 import { me } from '../api/auth'
 import { parseFileUrlList } from '../utils/oss'
 import FilePreviewDialog from '../components/FilePreviewDialog.vue'
+import QueryConsole from '../components/QueryConsole.vue'
+import { useQueryConsole } from '../composables/useQueryConsole'
 
 const router = useRouter()
 
@@ -75,13 +77,63 @@ async function load() {
   }
 }
 
+// ------------------------------------------------------------
+// 检索台：条件一变就自动重查，不再需要「查询」按钮
+// ------------------------------------------------------------
+
+// 只对筛选字段敏感，翻页、改每页条数不应触发重查
+const filterSignature = computed(() =>
+  JSON.stringify({
+    contractNo: filters.contractNo.trim(),
+    contractName: filters.contractName.trim(),
+    status: filters.status
+  })
+)
+
+function runQuery() {
+  filters.page = 1
+  load()
+}
+
+const { expanded: filterExpanded, run: runSearch } = useQueryConsole({
+  getSignature: () => filterSignature.value,
+  runQuery
+})
+
 function onReset() {
   filters.contractNo = ''
   filters.contractName = ''
   filters.status = null
-  filters.page = 1
-  load()
+  runSearch()
 }
+
+// 状态在这张表是单选，胶囊再点一次就是取消选择
+const statusPills = statusOptions.filter((o) => o.value !== null)
+
+function pickStatus(value) {
+  filters.status = filters.status === value ? null : value
+}
+
+const filterChips = computed(() => {
+  const chips = []
+  const name = filters.contractName.trim()
+  if (name) chips.push({ key: 'contractName', field: '名称', value: `含「${name}」` })
+  const no = filters.contractNo.trim()
+  if (no) chips.push({ key: 'contractNo', field: '编号', value: no })
+  if (filters.status !== null) chips.push({ key: 'status', field: '状态', value: statusText(filters.status) })
+  return chips
+})
+
+function removeFilterChip(key) {
+  if (key === 'contractName') filters.contractName = ''
+  else if (key === 'contractNo') filters.contractNo = ''
+  else if (key === 'status') filters.status = null
+}
+
+const hiddenActiveFilterCount = computed(() => {
+  if (filterExpanded.value) return 0
+  return filters.contractNo.trim() ? 1 : 0
+})
 
 function onPageChange(page) {
   filters.page = page
@@ -176,15 +228,23 @@ function formatWan(v) {
   return (n / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-// 剩余金额（元）
-function getRemainAmount(row) {
-  const total = Number(row.contractAmount ?? 0)
+// 实际付款金额（元）：付款计划中已登记的实付合计
+function getActualPaidAmount(row) {
   const paid = Number(row.paidAmount ?? 0)
-  if (!Number.isFinite(total) || !Number.isFinite(paid)) return 0
-  return total - paid
+  return Number.isFinite(paid) ? paid : 0
 }
 
-// 当前列表所有合同的剩余金额总和（元）
+// 付款余额（元）= 合同总额 - 实际付款金额
+function getRemainAmount(row) {
+  const remainFromApi = Number(row.remainAmount)
+  if (row.remainAmount != null && Number.isFinite(remainFromApi)) return remainFromApi
+  const total = Number(row.contractAmount ?? 0)
+  const paid = getActualPaidAmount(row)
+  if (!Number.isFinite(total)) return 0
+  return Math.round((total - paid) * 100) / 100
+}
+
+// 当前列表所有合同的付款余额总和（元）
 function getRemainTotal() {
   return tableData.value.reduce((sum, row) => sum + getRemainAmount(row), 0)
 }
@@ -203,32 +263,58 @@ function checkOverflow(e, row, field) {
         <el-icon class="titleIcon"><Tickets /></el-icon>
         <div class="title">合同列表</div>
       </div>
+      <div class="actions">
+        <el-button type="primary" @click="$router.push('/contract/edit')">新增合同</el-button>
+        <el-button @click="load">刷新</el-button>
+      </div>
     </div>
 
+    <QueryConsole
+      class="qc-block"
+      v-model:expanded="filterExpanded"
+      :chips="filterChips"
+      :hidden-active-count="hiddenActiveFilterCount"
+      :result-text="'共 ' + total + ' 条'"
+      :busy="loading"
+      @remove-chip="removeFilterChip"
+      @clear-all="onReset"
+    >
+      <template #search>
+        <el-input v-model="filters.contractName" class="qc-search" placeholder="搜索合同名称，回车即查" clearable @keyup.enter="runSearch">
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </template>
+
+      <template #inline>
+        <span class="qc-flabel">状态</span>
+        <div class="qc-pills" role="group" aria-label="按状态筛选">
+          <button
+            v-for="opt in statusPills"
+            :key="opt.value"
+            type="button"
+            class="qc-pill"
+            :class="{ 'is-on': filters.status === opt.value }"
+            :aria-pressed="filters.status === opt.value"
+            @click="pickStatus(opt.value)"
+          >
+            <span class="qc-pill-dot" aria-hidden="true" />{{ opt.label }}
+          </button>
+        </div>
+      </template>
+
+      <template #more>
+        <div class="qc-grid">
+          <div class="qc-cell">
+            <span class="qc-flabel">合同编号</span>
+            <el-input v-model="filters.contractNo" placeholder="完整编号，精确匹配" clearable @keyup.enter="runSearch" />
+          </div>
+        </div>
+      </template>
+    </QueryConsole>
+
     <el-card class="card" shadow="never">
-      <div class="filter-bar">
-        <el-form :model="filters" inline class="filter-form">
-          <el-form-item label="合同编号">
-            <el-input v-model="filters.contractNo" placeholder="精确匹配" clearable />
-          </el-form-item>
-          <el-form-item label="合同名称">
-            <el-input v-model="filters.contractName" placeholder="模糊搜索" clearable />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="filters.status" clearable placeholder="选择状态" style="width: 160px" @change="load">
-              <el-option v-for="opt in statusOptions" :key="String(opt.value)" :value="opt.value" :label="opt.label" />
-            </el-select>
-          </el-form-item>
-          <el-form-item class="action-buttons">
-            <el-button type="primary" @click="load">查询</el-button>
-            <el-button @click="onReset">重置</el-button>
-          </el-form-item>
-          <el-form-item style="margin-left: auto; margin-right: 0;">
-            <el-button type="primary" @click="$router.push('/contract/edit')">新增合同</el-button>
-            <el-button @click="load">刷新</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
 
       <el-table
         v-loading="loading"
@@ -273,17 +359,14 @@ function checkOverflow(e, row, field) {
         </el-table-column>
         <el-table-column label="付款进度" width="120">
           <template #default="{ row }">
-            <!-- 一次性付款合同不走分期计划，避免显示 0.00万 0/0，这里只展示文案 -->
-            <div v-if="row.paymentTerms === 1" style="font-size: 12px; color: #909399;">
-              一次性付款
-            </div>
-            <div v-else style="display: flex; flex-direction: column; gap: 4px;">
-              <span class="amount">¥{{ formatWan(row.paidAmount) }}万</span>
-              <span style="font-size: 12px; color: #909399;">次数: {{ row.paidPlanCount ?? 0 }} / {{ row.totalPlanCount ?? 0 }}</span>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span class="amount">¥{{ formatWan(getActualPaidAmount(row)) }}万</span>
+              <span v-if="row.paymentTerms === 1" style="font-size: 12px; color: #909399;">一次性付款</span>
+              <span v-else style="font-size: 12px; color: #909399;">次数: {{ row.paidPlanCount ?? 0 }} / {{ row.totalPlanCount ?? 0 }}</span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="剩余金额" width="100">
+        <el-table-column label="付款余额" width="100">
           <template #default="{ row }">
             <span style="color: #f56c6c; font-weight: 600;">
               ¥{{ formatWan(getRemainAmount(row)) }}万
@@ -343,7 +426,7 @@ function checkOverflow(e, row, field) {
 
       <div class="footer-bar">
         <div class="summary-bar">
-          <span>当前列表剩余金额合计：</span>
+          <span>当前列表付款余额合计：</span>
           <span class="summary-amount">¥{{ formatWan(getRemainTotal()) }}万</span>
         </div>
 
@@ -367,12 +450,10 @@ function checkOverflow(e, row, field) {
 .page { padding: 18px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .titleWrap { display: flex; align-items: center; gap: 8px; }
-.titleIcon { font-size: 22px; color: #3b82f6; }
-.title { font-size: 18px; font-weight: 900; color: #111827; }
+.titleIcon { font-size: 20px; color: var(--g-text); }
+.title { font-size: 18px; font-weight: 800; color: var(--g-text); letter-spacing: -0.02em; }
 .actions { display: flex; align-items: center; gap: 10px; }
-.card { border-radius: 14px; }
-.filter-bar { margin-bottom: 10px; }
-.filter-form { display: flex; flex-wrap: wrap; gap: 10px; }
+.card { border-radius: var(--g-radius-md); border: 1px solid var(--g-border); }
 
 
 .footer-bar {
@@ -394,12 +475,12 @@ function checkOverflow(e, row, field) {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--g-text-secondary);
 }
 
 .summary-amount {
   font-weight: 600;
-  color: #d97706;
+  color: var(--g-warning);
 }
 
 .op-col { margin-left: -6px; }
@@ -416,3 +497,5 @@ function checkOverflow(e, row, field) {
   word-break: break-all;
 }
 </style>
+
+

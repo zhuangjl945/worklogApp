@@ -6,6 +6,9 @@ import com.zjl.worklog.common.api.ApiResponse;
 import com.zjl.worklog.common.api.PageResponse;
 import com.zjl.worklog.common.exception.BizException;
 import com.zjl.worklog.security.CurrentUser;
+import com.zjl.worklog.security.DataScope;
+import com.zjl.worklog.security.Permission;
+import com.zjl.worklog.security.PermissionService;
 import com.zjl.worklog.security.UserContext;
 import com.zjl.worklog.work.dto.CategoryTemplate;
 import com.zjl.worklog.work.dto.WorkCategoryStat;
@@ -52,14 +55,16 @@ public class WorkRecordController {
     private final WorkRecordExpenseMapper expenseMapper;
     private final WorkCategoryMapper categoryMapper;
     private final ObjectMapper objectMapper;
+    private final PermissionService permissions;
 
     public WorkRecordController(WorkRecordMapper recordMapper, WorkRecordLogMapper logMapper, WorkRecordExpenseMapper expenseMapper,
-                                WorkCategoryMapper categoryMapper, ObjectMapper objectMapper) {
+                                WorkCategoryMapper categoryMapper, ObjectMapper objectMapper, PermissionService permissions) {
         this.recordMapper = recordMapper;
         this.logMapper = logMapper;
         this.expenseMapper = expenseMapper;
         this.categoryMapper = categoryMapper;
         this.objectMapper = objectMapper;
+        this.permissions = permissions;
     }
 
     @GetMapping
@@ -74,16 +79,33 @@ public class WorkRecordController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime createTimeTo,
             @RequestParam(required = false) Integer isImportant,
             @RequestParam(required = false) Boolean overdue,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime dueBefore
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime dueBefore,
+            // mine=只看本人（默认），dept=看本人所在科室；供看板切范围用
+            @RequestParam(required = false) String scope
     ) {
         CurrentUser cu = requireLogin();
         if (page < 1) page = 1;
         if (size < 1) size = 10;
-        long total = recordMapper.count(cu.getId(), categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo, isImportant, overdue, dueBefore);
+        // 范围只按登录态里的科室/角色放开，deptId 不接受外部传参，否则任何人都能翻别科室的记录
+        Long userId = cu.getId();
+        Long deptId = null;
+        if ("dept".equalsIgnoreCase(scope)) {
+            // 本科室范围是「可配置门槛」：管理员若把 board.scopeDept 调高，普通员工就连同事的任务都看不到
+            requirePermission(cu, Permission.BOARD_SCOPE_DEPT, "未绑定科室，无法查看科室数据");
+            if (cu.getDeptId() == null) {
+                throw new BizException(40002, "当前账号未绑定科室，无法查看科室数据");
+            }
+            userId = null;
+            deptId = cu.getDeptId();
+        } else if ("all".equalsIgnoreCase(scope)) {
+            requirePermission(cu, Permission.BOARD_SCOPE_ALL, null);
+            userId = null;
+        }
+        long total = recordMapper.count(userId, deptId, categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo, isImportant, overdue, dueBefore);
         long offset = (page - 1) * size;
         List<WorkRecord> records = total == 0
                 ? List.of()
-                : recordMapper.selectPage(offset, size, cu.getId(), categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo, isImportant, overdue, dueBefore);
+                : recordMapper.selectPage(offset, size, userId, deptId, categoryId, categoryIds, statusIds, title, createTimeFrom, createTimeTo, isImportant, overdue, dueBefore);
         var views = records.stream().map(WorkRecordDTO::new).toList();
         return ApiResponse.ok(PageResponse.of(page, size, total, views));
     }
@@ -93,7 +115,7 @@ public class WorkRecordController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTimeFrom,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTimeTo
     ) {
-        // Since there is no admin role, this report is also for the current user.
+        // 个人分类统计：不分角色，永远只算自己的量（角色放开的是「看别人的记录」，不是「看别人的统计」）
         CurrentUser cu = requireLogin();
         return ApiResponse.ok(recordMapper.statsByCategory(cu.getId(), endTimeFrom, endTimeTo));
     }
@@ -123,8 +145,19 @@ public class WorkRecordController {
             @RequestParam(required = false) Long deptId,
             @RequestParam(required = false) Long userId
     ) {
-        requireLogin();
-        return ApiResponse.ok(recordMapper.statsUserDeptCategory(endTimeFrom, endTimeTo, deptId, userId));
+        CurrentUser cu = requireLogin();
+        // 跨科室工作量表按权限点收口，否则任何人都能靠改 deptId/userId 翻全单位的工时：
+        // 拿到 report.deptCross 才可用传入的筛选条件；否则科室管理员锁本科室、普通员工只算本人
+        if (permissions.allows(cu, Permission.REPORT_DEPT_CROSS)) {
+            return ApiResponse.ok(recordMapper.statsUserDeptCategory(endTimeFrom, endTimeTo, deptId, userId));
+        }
+        if (DataScope.canViewOthers(cu)) {
+            if (cu.getDeptId() == null) {
+                throw new BizException(40002, "当前账号未绑定科室，无法查看科室统计");
+            }
+            return ApiResponse.ok(recordMapper.statsUserDeptCategory(endTimeFrom, endTimeTo, cu.getDeptId(), userId));
+        }
+        return ApiResponse.ok(recordMapper.statsUserDeptCategory(endTimeFrom, endTimeTo, null, cu.getId()));
     }
 
     @GetMapping("/weekly-report")
@@ -175,11 +208,53 @@ public class WorkRecordController {
     @GetMapping("/{id}")
     public ApiResponse<WorkRecordDTO> detail(@PathVariable Long id) {
         CurrentUser cu = requireLogin();
-        WorkRecord record = recordMapper.selectById(id, cu.getId());
-        if (record == null) {
+        WorkRecord record = recordMapper.selectByIdAny(id);
+        // 本科室记录人人可读（看板/列表会展示同事的任务），跨科室只有管理员能读
+        if (record == null || !canRead(cu, record)) {
             throw new BizException(40001, "记录不存在");
         }
         return ApiResponse.ok(new WorkRecordDTO(record));
+    }
+
+    /** 权限点不满足就抛 40003；noDeptMessage 用于「账号没绑科室」这种要单独说明的情况 */
+    private void requirePermission(CurrentUser cu, Permission permission, String noDeptMessage) {
+        if (permissions.allows(cu, permission)) {
+            return;
+        }
+        boolean noDept = noDeptMessage != null && cu.getDeptId() == null;
+        throw new BizException(40003, noDept
+                ? noDeptMessage
+                : "该功能需要「" + permissions.minRoleLabel(permission) + "」及以上角色");
+    }
+
+    /**
+     * 可读：本人 / 同科室（受 board.scopeDept 门槛）/ 跨科室（受 board.scopeAll 门槛）。
+     *
+     * <p>详情接口必须和列表用同一套门槛，否则把范围调严之后，
+     * 列表里看不到的记录仍能被猜出 ID 直接读到，等于留了个后门。
+     */
+    private boolean canRead(CurrentUser cu, WorkRecord record) {
+        if (record.getUserId().equals(cu.getId())) {
+            return true;
+        }
+        if (DataScope.sameDept(cu, record.getDeptId())) {
+            return permissions.allows(cu, Permission.BOARD_SCOPE_DEPT);
+        }
+        return permissions.allows(cu, Permission.BOARD_SCOPE_ALL);
+    }
+
+    /** 可写：本人 / 本科室的科室管理员 / 管理员。删除不走这里，见 delete 注释 */
+    private WorkRecord requireWritable(Long id, CurrentUser cu) {
+        WorkRecord existed = recordMapper.selectByIdAny(id);
+        if (existed == null) {
+            throw new BizException(40001, "记录不存在");
+        }
+        if (!DataScope.canEdit(cu, existed.getUserId(), existed.getDeptId(),
+                permissions.minRole(Permission.RECORD_EDIT_DEPT_OTHERS))) {
+            throw new BizException(40003, "只能维护自己的记录；他人记录需「"
+                    + permissions.minRoleLabel(Permission.RECORD_EDIT_DEPT_OTHERS) + "」及以上角色");
+        }
+        return existed;
     }
 
     @PostMapping
@@ -207,10 +282,7 @@ public class WorkRecordController {
     @PutMapping("/{id}")
     public ApiResponse<Boolean> update(@PathVariable Long id, @Valid @RequestBody UpdateWorkRecordRequest req) {
         CurrentUser cu = requireLogin();
-        WorkRecord existed = recordMapper.selectById(id, cu.getId());
-        if (existed == null) {
-            throw new BizException(40001, "记录不存在");
-        }
+        WorkRecord existed = requireWritable(id, cu);
         applyCategoryTemplateRules(cu, req.getCategoryId() != null ? req.getCategoryId() : existed.getCategoryId(),
                 req.getContent(), req.getEndTime(), req.getImageUrls());
         WorkRecord update = new WorkRecord();
@@ -233,10 +305,7 @@ public class WorkRecordController {
     @PutMapping("/{id}/status")
     public ApiResponse<Boolean> updateStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest req) {
         CurrentUser cu = requireLogin();
-        WorkRecord existed = recordMapper.selectById(id, cu.getId());
-        if (existed == null) {
-            throw new BizException(40001, "记录不存在");
-        }
+        requireWritable(id, cu);
         WorkRecord update = new WorkRecord();
         update.setId(id);
         update.setUserId(cu.getId());
@@ -248,21 +317,33 @@ public class WorkRecordController {
     @DeleteMapping("/{id}")
     public ApiResponse<Boolean> delete(@PathVariable Long id) {
         CurrentUser cu = requireLogin();
-        recordMapper.softDelete(id, cu.getId());
+        // 删除刻意不跟随「科室管理员可编辑」放开：改别人的任务是协作，删别人的记录是抹数据
+        WorkRecord existed = recordMapper.selectByIdAny(id);
+        if (existed == null) {
+            throw new BizException(40001, "记录不存在");
+        }
+        if (!existed.getUserId().equals(cu.getId())) {
+            throw new BizException(40003, "只能删除本人的记录");
+        }
+        // 软删影响 0 行要说出来：以前无条件回 true，前端弹「删除成功」但记录还在，等于骗人
+        if (recordMapper.softDelete(id, cu.getId()) == 0) {
+            throw new BizException(40001, "记录不存在或已被删除");
+        }
         return ApiResponse.ok(true);
     }
 
-    // --- Log APIs ---
+    // --- Log / Expense APIs ---
+    // 读走 requireReadable（与详情同口径），写走 requireWritableRecord（与主表编辑同口径）。
     @GetMapping("/{id}/logs")
     public ApiResponse<List<WorkRecordLog>> getLogs(@PathVariable Long id) {
-        requireRecordOwner(id);
+        requireReadable(id);
         return ApiResponse.ok(logMapper.selectByWorkRecordId(id));
     }
 
     @PostMapping("/{id}/logs")
     public ApiResponse<Map<String, Long>> addLog(@PathVariable Long id, @Valid @RequestBody AddLogRequest req) {
         CurrentUser cu = requireLogin();
-        requireRecordOwner(id);
+        requireWritableRecord(id);
         WorkRecordLog log = new WorkRecordLog();
         log.setWorkRecordId(id);
         log.setUserId(cu.getId());
@@ -273,7 +354,7 @@ public class WorkRecordController {
 
     @PutMapping("/{recordId}/logs/{logId}")
     public ApiResponse<Boolean> updateLog(@PathVariable Long recordId, @PathVariable Long logId, @Valid @RequestBody AddLogRequest req) {
-        requireRecordOwner(recordId);
+        requireWritableRecord(recordId);
         WorkRecordLog existedLog = logMapper.selectById(logId);
         if (existedLog == null || !Objects.equals(existedLog.getWorkRecordId(), recordId)) {
             throw new BizException(40001, "处理详情记录不存在");
@@ -287,7 +368,7 @@ public class WorkRecordController {
 
     @DeleteMapping("/{recordId}/logs/{logId}")
     public ApiResponse<Boolean> deleteLog(@PathVariable Long recordId, @PathVariable Long logId) {
-        requireRecordOwner(recordId);
+        requireWritableRecord(recordId);
         WorkRecordLog existedLog = logMapper.selectById(logId);
         if (existedLog != null && Objects.equals(existedLog.getWorkRecordId(), recordId)) {
             logMapper.deleteById(logId);
@@ -298,13 +379,13 @@ public class WorkRecordController {
     // --- Expense APIs ---
     @GetMapping("/{id}/expenses")
     public ApiResponse<List<WorkRecordExpense>> getExpenses(@PathVariable Long id) {
-        requireRecordOwner(id);
+        requireReadable(id);
         return ApiResponse.ok(expenseMapper.selectByWorkRecordId(id));
     }
 
     @PostMapping("/{id}/expenses")
     public ApiResponse<Map<String, Long>> addExpense(@PathVariable Long id, @Valid @RequestBody AddExpenseRequest req) {
-        requireRecordOwner(id);
+        requireWritableRecord(id);
         WorkRecordExpense expense = new WorkRecordExpense();
         expense.setWorkRecordId(id);
         expense.setExpenseType(req.getExpenseType());
@@ -317,7 +398,7 @@ public class WorkRecordController {
 
     @PutMapping("/{recordId}/expenses/{expenseId}")
     public ApiResponse<Boolean> updateExpense(@PathVariable Long recordId, @PathVariable Long expenseId, @Valid @RequestBody AddExpenseRequest req) {
-        requireRecordOwner(recordId);
+        requireWritableRecord(recordId);
         WorkRecordExpense existedExpense = expenseMapper.selectById(expenseId);
         if (existedExpense == null || !Objects.equals(existedExpense.getWorkRecordId(), recordId)) {
             throw new BizException(40001, "费用记录不存在");
@@ -334,7 +415,7 @@ public class WorkRecordController {
 
     @DeleteMapping("/{recordId}/expenses/{expenseId}")
     public ApiResponse<Boolean> deleteExpense(@PathVariable Long recordId, @PathVariable Long expenseId) {
-        requireRecordOwner(recordId);
+        requireWritableRecord(recordId);
         WorkRecordExpense existedExpense = expenseMapper.selectById(expenseId);
         if (existedExpense != null && Objects.equals(existedExpense.getWorkRecordId(), recordId)) {
             expenseMapper.deleteById(expenseId);
@@ -351,12 +432,32 @@ public class WorkRecordController {
         return cu;
     }
 
-    private void requireRecordOwner(Long recordId) {
+    /**
+     * 可读一条记录：与详情接口完全同一套门槛（本人 / 本科室受 board.scopeDept 约束 / 跨科室受 board.scopeAll 约束）。
+     *
+     * <p>处理详情、费用这类子资源的读权限必须挂在父记录上，否则把列表范围调严之后，
+     * 猜得出记录 ID 依然能读到别人的明细，等于留了个后门。
+     */
+    private WorkRecord requireReadable(Long recordId) {
         CurrentUser cu = requireLogin();
-        WorkRecord record = recordMapper.selectById(recordId, cu.getId());
-        if (record == null) {
+        WorkRecord record = recordMapper.selectByIdAny(recordId);
+        if (record == null || !canRead(cu, record)) {
             throw new BizException(40001, "记录不存在或无权访问");
         }
+        return record;
+    }
+
+    /**
+     * 可写一条记录：直接复用主表 PUT /{id} 的 requireWritable，不再另立一套「只认本人」的口径。
+     *
+     * <p>之前子资源走的是 requireRecordOwner（selectById 带 user_id，只认本人），而主表走的是
+     * DataScope.canEdit（本人 / 本科室达门槛的科室管理员 / 系统管理员）。两套口径并存的后果是
+     * 科室管理员能改同事任务的状态和字段，却给同一条任务加不了处理详情和费用，界面只会报
+     * 「记录不存在或无权访问」——同一份权限在同一个页面上时灵时不灵，比一律禁止更难排查。
+     * 删除仍只允许本人，那条限制在 delete 里没有走这里，保持原样。
+     */
+    private WorkRecord requireWritableRecord(Long recordId) {
+        return requireWritable(recordId, requireLogin());
     }
 
     private void applyCategoryTemplateRules(CurrentUser cu, Long categoryId, String content, LocalDateTime endTime, String imageUrls) {

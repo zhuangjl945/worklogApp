@@ -1,5 +1,8 @@
 package com.zjl.worklog.dept;
 
+import com.zjl.worklog.security.Permission;
+import com.zjl.worklog.security.RequireRole;
+import com.zjl.worklog.security.Role;
 import com.zjl.worklog.common.api.ApiResponse;
 import com.zjl.worklog.common.api.PageResponse;
 import com.zjl.worklog.common.exception.BizException;
@@ -7,6 +10,7 @@ import com.zjl.worklog.dept.dto.DeptTreeNode;
 import com.zjl.worklog.dept.entity.DeptEntity;
 import com.zjl.worklog.dept.mapper.DeptMapper;
 import com.zjl.worklog.security.CurrentUser;
+import com.zjl.worklog.security.DataScope;
 import com.zjl.worklog.security.UserContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -50,9 +54,6 @@ public class DeptController {
         if (cu == null) {
             throw new BizException(401, "未登录");
         }
-        if (cu.getDeptId() == null) {
-            throw new BizException(40001, "用户缺少科室ID");
-        }
 
         List<DeptEntity> all = deptMapper.selectAllEnabled();
         if (all.isEmpty()) {
@@ -68,22 +69,32 @@ public class DeptController {
             }
         }
 
-        DeptEntity cur = byId.get(cu.getDeptId());
-        if (cur == null) {
-            throw new BizException(40001, "用户科室不存在或已禁用");
-        }
-
-        // 向上追溯到一级科室（root）
-        while (cur.getParentId() != null && byId.containsKey(cur.getParentId())) {
-            cur = byId.get(cur.getParentId());
-        }
-
-        Long rootId = cur.getId();
-
         // 返回 root 及其下属所有子科室（扁平列表）
         List<DeptEntity> result = new ArrayList<>();
         Deque<Long> stack = new ArrayDeque<>();
-        stack.push(rootId);
+
+        if (DataScope.canCrossDept(cu)) {
+            // 与 /tree 同处理：系统管理员多半不绑科室，老逻辑在这里会直接报「用户缺少科室ID」，
+            // 合同负责人下拉和报表的科室筛选都会因此空掉
+            for (DeptEntity d : all) {
+                if (d.getParentId() == null) {
+                    stack.push(d.getId());
+                }
+            }
+        } else {
+            if (cu.getDeptId() == null) {
+                throw new BizException(40001, "用户缺少科室ID");
+            }
+            DeptEntity cur = byId.get(cu.getDeptId());
+            if (cur == null) {
+                throw new BizException(40001, "用户科室不存在或已禁用");
+            }
+            // 向上追溯到一级科室（root）
+            while (cur.getParentId() != null && byId.containsKey(cur.getParentId())) {
+                cur = byId.get(cur.getParentId());
+            }
+            stack.push(cur.getId());
+        }
 
         while (!stack.isEmpty()) {
             Long id = stack.pop();
@@ -113,9 +124,6 @@ public class DeptController {
         if (cu == null) {
             throw new BizException(401, "未登录");
         }
-        if (cu.getDeptId() == null) {
-            throw new BizException(40001, "用户缺少科室ID");
-        }
 
         List<DeptEntity> all = deptMapper.selectAllEnabled();
         if (all.isEmpty()) {
@@ -131,21 +139,32 @@ public class DeptController {
             }
         }
 
-        DeptEntity cur = byId.get(cu.getDeptId());
-        if (cur == null) {
-            throw new BizException(40001, "用户科室不存在或已禁用");
-        }
-
-        // 向上追溯到一级科室（root）
-        while (cur.getParentId() != null && byId.containsKey(cur.getParentId())) {
-            cur = byId.get(cur.getParentId());
-        }
-        Long rootId = cur.getId();
-
         // root 及其下属所有子科室（扁平列表，用于组树）
         List<DeptEntity> list = new ArrayList<>();
         Deque<Long> stack = new ArrayDeque<>();
-        stack.push(rootId);
+
+        if (DataScope.canCrossDept(cu)) {
+            // 系统管理员给全量树：超管账号通常不绑科室，按老逻辑会直接抛「用户缺少科室ID」，
+            // 结果员工管理的科室列只能显示成裸 ID、也选不了科室——而授予角色恰好依赖这两个能力
+            for (DeptEntity d : all) {
+                if (d.getParentId() == null) {
+                    stack.push(d.getId());
+                }
+            }
+        } else {
+            if (cu.getDeptId() == null) {
+                throw new BizException(40001, "用户缺少科室ID");
+            }
+            DeptEntity cur = byId.get(cu.getDeptId());
+            if (cur == null) {
+                throw new BizException(40001, "用户科室不存在或已禁用");
+            }
+            // 向上追溯到一级科室（root）
+            while (cur.getParentId() != null && byId.containsKey(cur.getParentId())) {
+                cur = byId.get(cur.getParentId());
+            }
+            stack.push(cur.getId());
+        }
 
         while (!stack.isEmpty()) {
             Long id = stack.pop();
@@ -185,6 +204,7 @@ public class DeptController {
     }
 
     @PostMapping
+    @RequireRole(value = Role.ADMIN, permission = Permission.DEPT_MANAGE)
     public ApiResponse<Map<String, Long>> create(@Valid @RequestBody CreateDeptRequest req) {
         DeptEntity existed = deptMapper.selectByDeptCode(req.getDeptCode());
         if (existed != null) {
@@ -203,6 +223,7 @@ public class DeptController {
     }
 
     @PutMapping("/{id}")
+    @RequireRole(value = Role.ADMIN, permission = Permission.DEPT_MANAGE)
     public ApiResponse<Boolean> update(@PathVariable Long id, @Valid @RequestBody UpdateDeptRequest req) {
         DeptEntity existed = deptMapper.selectById(id);
         if (existed == null) {
@@ -220,6 +241,7 @@ public class DeptController {
     }
 
     @PutMapping("/{id}/status")
+    @RequireRole(value = Role.ADMIN, permission = Permission.DEPT_MANAGE)
     public ApiResponse<Boolean> updateStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest req) {
         DeptEntity existed = deptMapper.selectById(id);
         if (existed == null) {
@@ -230,6 +252,7 @@ public class DeptController {
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole(value = Role.ADMIN, permission = Permission.DEPT_MANAGE)
     public ApiResponse<Boolean> delete(@PathVariable Long id) {
         DeptEntity existed = deptMapper.selectById(id);
         if (existed == null) {

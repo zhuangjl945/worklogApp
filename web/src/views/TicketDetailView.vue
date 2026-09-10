@@ -12,7 +12,7 @@ import {
   ticketReply,
   ticketToRecord
 } from '../api/ticket'
-import { userPage } from '../api/user'
+import { userRoster } from '../api/user'
 import { uploadToOss } from '../utils/oss'
 import { fetchTicketImage } from '../utils/ticketThumb'
 import FilePreviewDialog from '../components/FilePreviewDialog.vue'
@@ -71,6 +71,14 @@ const canAssign = computed(() => status.value === 0 || status.value === 10)
 const canWork = computed(() => status.value === 10)
 const canClose = computed(() => status.value === 30 || status.value === 50)
 
+// 紧急程度 tag 颜色：code 越小越紧急
+function urgencyTagType(code) {
+  if (code <= 1) return 'danger'
+  if (code === 2) return 'warning'
+  if (code === 3) return ''
+  return 'info'
+}
+
 function tagType(code) {
   if (code === 0) return 'danger'
   if (code === 10 || code === 20) return 'warning'
@@ -91,6 +99,18 @@ function formatSpan(minutes) {
   const mm = minutes % 60
   return mm ? `${h} 小时 ${mm} 分` : `${h} 小时`
 }
+
+/**
+ * 「待报修人确认」阶段的自动确认提示。
+ * 后端只在开关打开且状态为 20 时才下发 autoConfirmRemainMinutes，
+ * 所以下面不需要再判断参数是否启用，null 就等于「不提示」。
+ */
+const autoConfirmText = computed(() => {
+  const m = data.value?.autoConfirmRemainMinutes
+  if (status.value !== 20 || m == null) return ''
+  return m <= 0 ? '报修人已超时未确认，系统将在下一轮扫描（5 分钟内）自动确认'
+    : `报修人未确认，${formatSpan(m)}后系统将自动确认已解决`
+})
 
 onMounted(load)
 
@@ -132,8 +152,9 @@ async function openAssign() {
   assignRemark.value = ''
   if (!deptUsers.value.length && data.value?.deptId) {
     try {
-      const resp = await userPage({ page: 1, size: 200, deptId: data.value.deptId, status: 1 })
-      deptUsers.value = resp.data?.records || []
+      // 花名册接口只返回启用的账号，不用再去传 status
+      const resp = await userRoster({ size: 200, deptId: data.value.deptId })
+      deptUsers.value = resp.data || []
     } catch (e) {
       ElMessage.warning('同事列表加载失败，可直接联系科室管理员')
     }
@@ -240,11 +261,12 @@ function goRecords() {
         <div>
           <el-tag :type="tagType(data.status)" disable-transitions>{{ data.statusName }}</el-tag>
           <span class="no">{{ data.ticketNo }}</span>
-          <el-tag v-if="data.urgency === 1" type="danger" size="small" effect="plain">紧急</el-tag>
+          <el-tag v-if="data.urgencyName" :type="urgencyTagType(data.urgency)" size="small" effect="plain">{{ data.urgencyName }}</el-tag>
         </div>
         <div class="sla" :class="{ ov: data.slaRemainMinutes != null && data.slaRemainMinutes < 0 && [0, 10, 20].includes(data.status) }">
           {{ slaText() }}
         </div>
+        <div v-if="autoConfirmText" class="auto-confirm">{{ autoConfirmText }}</div>
         <el-button link @click="$router.push('/tickets')">← 返回受理台</el-button>
       </div>
 
@@ -255,6 +277,7 @@ function goRecords() {
           <el-descriptions-item label="报修人">{{ data.contactName || '匿名' }}</el-descriptions-item>
           <el-descriptions-item label="联系电话">{{ data.contactPhone || '—' }}</el-descriptions-item>
           <el-descriptions-item label="地点">{{ data.location || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="问题科室">{{ data.bizDeptName || '—' }}</el-descriptions-item>
           <el-descriptions-item label="问题类型">{{ data.categoryName || '未指定' }}</el-descriptions-item>
           <el-descriptions-item label="登记入口">{{ data.channelName || '—' }}</el-descriptions-item>
           <el-descriptions-item label="处理人">{{ data.assigneeName || '尚未受理' }}</el-descriptions-item>
@@ -374,6 +397,12 @@ function goRecords() {
 .sla.ov {
   color: var(--el-color-danger);
   font-weight: 600;
+}
+
+/* 自动确认倒计时：比 SLA 弱一档，它是解释性信息不是待办压力 */
+.auto-confirm {
+  font-size: 12px;
+  color: var(--el-color-warning-dark-2);
 }
 
 .block {

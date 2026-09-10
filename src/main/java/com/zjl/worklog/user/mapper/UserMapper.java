@@ -1,5 +1,6 @@
 package com.zjl.worklog.user.mapper;
 
+import com.zjl.worklog.user.dto.UserRoleView;
 import com.zjl.worklog.user.entity.UserEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -31,6 +32,30 @@ public interface UserMapper {
                                @Param("deptId") Long deptId,
                                @Param("deptIds") List<Long> deptIds,
                                @Param("status") Integer status);
+
+    /** 统计指定角色且处于启用状态的人数 */
+    long countByRole(@Param("role") String role);
+
+    /**
+     * 人员角色设置页专用：按角色/科室/关键字筛人并带出科室名。
+     *
+     * <p>不复用 selectPage，是因为这里必须带 dept_name（页面按科室看人），
+     * 而且排序要按角色权重走，和工作记录那套分页条件不是一回事。
+     */
+    long countRolePage(@Param("role") String role,
+                       @Param("deptId") Long deptId,
+                       @Param("keyword") String keyword,
+                       @Param("status") Integer status);
+
+    List<UserRoleView> selectRolePage(@Param("offset") long offset,
+                                      @Param("limit") long limit,
+                                      @Param("role") String role,
+                                      @Param("deptId") Long deptId,
+                                      @Param("keyword") String keyword,
+                                      @Param("status") Integer status);
+
+    /** 只改角色：授予/收回角色时不顺带覆盖姓名、科室、状态 */
+    int updateRole(@Param("id") Long id, @Param("role") String role);
 
     int insert(UserEntity entity);
 

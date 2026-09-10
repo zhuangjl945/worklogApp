@@ -457,9 +457,10 @@ onMounted(async () => {
 .page { padding: 18px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .titleWrap { display: flex; align-items: center; gap: 8px; }
-.titleIcon { font-size: 22px; color: #3b82f6; }
-.title { font-size: 18px; font-weight: 900; color: #111827; }
+.titleIcon { font-size: 22px; color: var(--g-text); }
+.title { font-size: 18px; font-weight: 900; color: var(--g-text); }
 .content-grid { display: flex; flex-direction: column; gap: 20px; }
 .amount { font-weight: bold; color: #f56c6c; font-size: 16px; }
 .card-header { font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
 </style>
+

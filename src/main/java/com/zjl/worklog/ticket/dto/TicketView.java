@@ -19,11 +19,15 @@ public class TicketView {
     /** 受理人回复时要把图片传到同一个渠道目录下，前端需要它拼 dir */
     private String channelCode;
     private Long deptId;
+    /** 问题所在科室（业务科室） */
+    private Long bizDeptId;
+    private String bizDeptName;
     private Long categoryId;
     private String categoryName;
     private Integer status;
     private String statusName;
     private Integer urgency;
+    private String urgencyName;
     private String title;
     private String content;
     private String location;
@@ -52,6 +56,15 @@ public class TicketView {
     /** SLA 剩余分钟数，负数表示已超时；dueTime 为空时为 null */
     private Long slaRemainMinutes;
 
+    /**
+     * 系统将在何时自动确认这条「待报修人确认」的工单。
+     * 自动确认参数关闭、或状态不是待确认时为 null，前端据此决定是否显示提示。
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime autoConfirmAt;
+    /** 距离自动确认还剩多少分钟（已夹紧不为负） */
+    private Long autoConfirmRemainMinutes;
+
     private List<LogLine> logs;
 
     @Data
@@ -74,6 +87,7 @@ public class TicketView {
         v.setTicketNo(e.getTicketNo());
         v.setChannelId(e.getChannelId());
         v.setDeptId(e.getDeptId());
+        v.setBizDeptId(e.getBizDeptId());
         v.setCategoryId(e.getCategoryId());
         v.setStatus(e.getStatus());
         v.setStatusName(TicketStatus.labelOf(e.getStatus()));

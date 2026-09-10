@@ -55,8 +55,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         String username = claims.get("username", String.class);
                         Long deptId = claims.get("deptId", Long.class);
                         String realName = claims.get("realName", String.class);
+                        // 签发于角色体系之前的旧 token 没有 role claim，Role.of(null) 兜底成 USER：
+                        // 宁可让老 token 权限变小，也不能让它绕过收口
+                        Role role = Role.of(claims.get("role", String.class));
 
-                        UserContext.set(new CurrentUser(userId, username, deptId, realName));
+                        UserContext.set(new CurrentUser(userId, username, deptId, realName, role));
 
                         User principal = new User(username, "N/A", Collections.emptyList());
                         UsernamePasswordAuthenticationToken authentication =

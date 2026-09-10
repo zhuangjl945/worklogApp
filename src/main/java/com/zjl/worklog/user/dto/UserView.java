@@ -13,6 +13,8 @@ public class UserView {
     private String username;
     private String realName;
     private Long deptId;
+    private String role;
+    private String roleLabel;
     private Integer status;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

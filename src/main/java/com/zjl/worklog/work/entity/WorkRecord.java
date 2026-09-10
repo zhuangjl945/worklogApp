@@ -26,4 +26,6 @@ public class WorkRecord {
     private Integer deleted;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    /** 非表字段：列表查询用子查询回填的记录人姓名，科室看板要区分任务在谁手上 */
+    private String recorderName;
 }

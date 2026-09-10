@@ -1,5 +1,8 @@
 package com.zjl.worklog.work;
 
+import com.zjl.worklog.security.Permission;
+import com.zjl.worklog.security.RequireRole;
+import com.zjl.worklog.security.Role;
 import com.zjl.worklog.common.api.ApiResponse;
 import com.zjl.worklog.common.api.PageResponse;
 import com.zjl.worklog.common.exception.BizException;
@@ -61,6 +64,7 @@ public class WorkCategoryController {
     }
 
     @PostMapping
+    @RequireRole(value = Role.DEPT_ADMIN, permission = Permission.WORK_CATEGORY_MANAGE)
     public ApiResponse<Map<String, Long>> create(@Valid @RequestBody CreateCategoryRequest req) {
         Long deptId = currentDeptId();
         // admin 全局查重：同一个 categoryCode 在全系统唯一（避免 admin 误创建导致多个科室重复）
@@ -83,6 +87,7 @@ public class WorkCategoryController {
     }
 
     @PutMapping("/{id}")
+    @RequireRole(value = Role.DEPT_ADMIN, permission = Permission.WORK_CATEGORY_MANAGE)
     public ApiResponse<Boolean> update(@PathVariable Long id, @Valid @RequestBody UpdateCategoryRequest req) {
         Long deptId = currentDeptId();
         WorkCategory existed = categoryMapper.selectById(id, deptId);
@@ -104,6 +109,7 @@ public class WorkCategoryController {
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole(value = Role.DEPT_ADMIN, permission = Permission.WORK_CATEGORY_MANAGE)
     public ApiResponse<Boolean> delete(@PathVariable Long id) {
         Long deptId = currentDeptId();
         WorkCategory existed = categoryMapper.selectById(id, deptId);

@@ -259,11 +259,12 @@ onMounted(loadDetail)
 .page { padding: 18px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .titleWrap { display: flex; align-items: center; gap: 8px; }
-.titleIcon { font-size: 22px; color: #3b82f6; }
-.title { font-size: 18px; font-weight: 900; color: #111827; }
-.tabs-container { background: #fff; padding: 20px; border-radius: 14px; }
+.titleIcon { font-size: 22px; color: var(--g-text); }
+.title { font-size: 18px; font-weight: 900; color: var(--g-text); }
+.tabs-container { background: #fff; padding: 20px; border-radius: var(--g-radius-md); }
 .form-card { border: none; }
 .form { max-width: 800px; margin: 0 auto; }
 .table-toolbar { margin-bottom: 16px; }
 .bottomActions { margin-top: 18px; display: flex; justify-content: center; gap: 12px; }
 </style>
+

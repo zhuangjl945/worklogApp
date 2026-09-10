@@ -303,13 +303,13 @@ onMounted(load)
 
 .titleIcon {
   font-size: 22px;
-  color: #3b82f6;
+  color: var(--g-text);
 }
 
 .title {
   font-size: 18px;
   font-weight: 900;
-  color: #111827;
+  color: var(--g-text);
 }
 
 .layout-grid {
@@ -321,7 +321,7 @@ onMounted(load)
 }
 
 .tree-card, .detail-card {
-  border-radius: 14px;
+  border-radius: var(--g-radius-md);
   display: flex;
   flex-direction: column;
 }
@@ -395,3 +395,4 @@ onMounted(load)
   }
 }
 </style>
+

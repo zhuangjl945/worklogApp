@@ -49,6 +49,31 @@ public class TicketRateLimiter {
         return true;
     }
 
+    /**
+     * 只判断窗口内是否已经用满，不记录本次。
+     *
+     * <p>给「先验凭证、验不过才计一次失败」这类场景用：如果直接用 acquire()，
+     * 报修人正常刷新几次进度就会把自己的配额吃光，被自己的合法行为锁在门外。
+     */
+    public boolean blocked(String key, int maxCount, long windowSeconds) {
+        if (maxCount <= 0) {
+            return false;
+        }
+        purgeIfDue();
+        long now = System.currentTimeMillis();
+        long windowMs = Math.max(1L, windowSeconds) * 1000L;
+        ArrayDeque<Long> hits = windows.get(key);
+        if (hits == null) {
+            return false;
+        }
+        synchronized (hits) {
+            while (!hits.isEmpty() && now - hits.peekFirst() > windowMs) {
+                hits.pollFirst();
+            }
+            return hits.size() >= maxCount;
+        }
+    }
+
     /** 清理长期不活跃的窗口，防止被恶意刷 key 把内存堆满 */
     private void purgeIfDue() {
         long now = System.currentTimeMillis();

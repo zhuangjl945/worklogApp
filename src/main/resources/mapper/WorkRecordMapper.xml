@@ -19,6 +19,8 @@
         <result column="deleted" property="deleted"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
+        <!-- 非表字段：记录人姓名，由 selectPage 的子查询回填 -->
+        <result column="recorder_name" property="recorderName"/>
     </resultMap>
 
     <resultMap id="WorkCategoryStatMap" type="com.zjl.worklog.work.dto.WorkCategoryStat">
@@ -55,6 +57,8 @@
         <where>
             AND deleted = 0
             <if test="userId != null">AND user_id = #{userId}</if>
+            <!-- 科室维度：scope=dept 时按记录所属科室圈定，不传即不启用 -->
+            <if test="deptId != null">AND dept_id = #{deptId}</if>
             <if test="categoryIds != null and categoryIds.size() > 0">
                 AND category_id IN
                 <foreach item="cid" index="index" collection="categoryIds" open="(" separator="," close=")">
@@ -93,7 +97,8 @@
     </select>
 
     <select id="selectPage" resultMap="WorkRecordMap">
-        SELECT <include refid="BaseColumns"/>
+        SELECT <include refid="BaseColumns"/>,
+        (SELECT u.real_name FROM user u WHERE u.id = work_record.user_id) AS recorder_name
         FROM work_record
         <include refid="WhereClause"/>
         ORDER BY create_time DESC, id DESC
@@ -104,6 +109,13 @@
         SELECT <include refid="BaseColumns"/>
         FROM work_record
         WHERE id = #{id} AND user_id = #{userId} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectByIdAny" resultMap="WorkRecordMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM work_record
+        WHERE id = #{id} AND deleted = 0
         LIMIT 1
     </select>
 
@@ -204,7 +216,7 @@
             <if test="durationMinutes != null">duration_minutes = #{durationMinutes},</if>
             <if test="isImportant != null">is_important = #{isImportant},</if>
         </set>
-        WHERE id = #{id} AND user_id = #{userId} AND deleted = 0
+        WHERE id = #{id} AND deleted = 0
     </update>
 
     <update id="softDelete">

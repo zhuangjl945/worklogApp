@@ -24,6 +24,8 @@ public class WorkRecordDTO {
     private Integer isImportant;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    /** 记录人姓名（科室看板/列表要用） */
+    private String recorderName;
 
     public WorkRecordDTO(WorkRecord entity) {
         this.id = entity.getId();
@@ -41,5 +43,6 @@ public class WorkRecordDTO {
         this.isImportant = entity.getIsImportant();
         this.createTime = entity.getCreateTime();
         this.updateTime = entity.getUpdateTime();
+        this.recorderName = entity.getRecorderName();
     }
 }

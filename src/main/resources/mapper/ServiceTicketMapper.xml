@@ -10,6 +10,7 @@
         <result column="ticket_no" property="ticketNo"/>
         <result column="channel_id" property="channelId"/>
         <result column="dept_id" property="deptId"/>
+        <result column="biz_dept_id" property="bizDeptId"/>
         <result column="category_id" property="categoryId"/>
         <result column="status" property="status"/>
         <result column="urgency" property="urgency"/>
@@ -37,7 +38,7 @@
     </resultMap>
 
     <sql id="BaseColumns">
-        id, ticket_no, channel_id, dept_id, category_id, status, urgency,
+        id, ticket_no, channel_id, dept_id, biz_dept_id, category_id, status, urgency,
         title, content, location, contact_name, contact_phone, image_urls,
         access_token_hash, assignee_id, assignee_name, work_record_id,
         submit_ip, submit_ua, due_time, accept_time, done_time, close_time,
@@ -85,11 +86,11 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO service_ticket (
-            ticket_no, channel_id, dept_id, category_id, status, urgency,
+            ticket_no, channel_id, dept_id, biz_dept_id, category_id, status, urgency,
             title, content, location, contact_name, contact_phone, image_urls,
             access_token_hash, submit_ip, submit_ua, due_time, deleted
         ) VALUES (
-            #{ticketNo}, #{channelId}, #{deptId}, #{categoryId}, #{status}, #{urgency},
+            #{ticketNo}, #{channelId}, #{deptId}, #{bizDeptId}, #{categoryId}, #{status}, #{urgency},
             #{title}, #{content}, #{location}, #{contactName}, #{contactPhone}, #{imageUrls},
             #{accessTokenHash}, #{submitIp}, #{submitUa}, #{dueTime}, 0
         )
@@ -152,6 +153,22 @@
         SET done_time = NULL
         WHERE id = #{id} AND deleted = 0
     </update>
+
+    <!--
+      自动确认候选：状态必须还停在 20（待报修人确认），完成时间已超过参数时限。
+      COALESCE(done_time, update_time) 兜住「状态是 20 但完成时间为空」的历史脏数据，
+      否则这些单子会永远留在待确认队列里，正是这个功能要消灭的现象。
+      按最早完成排在前，保证积压时先了结等得最久的报修人。
+    -->
+    <select id="selectConfirmTimeoutIds" resultType="long">
+        SELECT id
+        FROM service_ticket
+        WHERE deleted = 0
+          AND status = 20
+          AND COALESCE(done_time, update_time) &lt;= #{deadline}
+        ORDER BY COALESCE(done_time, update_time) ASC, id ASC
+        LIMIT #{limit}
+    </select>
     <update id="updateRating">
         UPDATE service_ticket
         SET rating = #{rating},
@@ -160,11 +177,12 @@
           AND rating IS NULL
     </update>
 
-    <select id="countByNoPrefix" resultType="long">
-        SELECT COUNT(1)
-        FROM service_ticket
-        WHERE ticket_no LIKE CONCAT(#{prefix}, '%')
-    </select>
+    <!-- 单号取「自增 ID + 基数」，插入时列留空，拿到 ID 后由这里回填（与 insert 同事务） -->
+    <update id="updateTicketNo">
+        UPDATE service_ticket
+        SET ticket_no = #{ticketNo}
+        WHERE id = #{id}
+    </update>
 
     <select id="countTodayByChannel" resultType="long">
         SELECT COUNT(1)

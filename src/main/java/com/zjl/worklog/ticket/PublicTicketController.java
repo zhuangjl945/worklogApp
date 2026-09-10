@@ -27,6 +27,9 @@ import java.util.Map;
  * <p>安全前提是「这里没有任何登录态」：
  * 1) 不读 UserContext；2) 渠道只由 form token 决定；3) 每个动作都有独立限流；
  * 4) 返回给报修人的视图一律走脱敏的 TicketPublicView。
+ * 5) 单号是可预测的短流水（ST100001 起），所以「凭单号能读到什么」完全取决于查询密码：
+ *    每单一套自设密码 + 查错次数锁定（见 TicketService#requireVisitorAccess）是这里的底线，
+ *    任何时候都不要把它改成「不填密码」或「全员统一密码」。
  */
 @Validated
 @RestController
@@ -91,25 +94,28 @@ public class PublicTicketController {
         return ApiResponse.ok(ossPolicyService.imagePolicy(dir, req.getFilename()));
     }
 
-    /** 提交问题 */
-    @PostMapping
+    /** 提交问题。"" 与 "/" 都要认：旧前端 axios.post('/') 会带尾斜杠，Boot 3 默认不匹配。 */
+    @PostMapping({"", "/"})
     public ApiResponse<Map<String, Object>> submit(@Valid @RequestBody PublicSubmitRequest req,
                                                    HttpServletRequest request) {
         TicketService.SubmitResult result = ticketService.submit(req, clientIp(request), request.getHeader("User-Agent"));
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("ticketNo", result.getTicketNo());
-        // accessToken 只在这一次响应里出现，库里只有它的 SHA-256；丢了只能找科室按单号查
-        data.put("accessToken", result.getAccessToken());
+        // 查询密码只在这一次响应里回显，库里存的是它的 SHA-256；忘了只能找科室按单号查
+        data.put("queryCode", result.getQueryCode());
+        // accessToken 是历史字段名，值与 queryCode 相同：浏览器里可能还缓存着没更新的旧前端，只认这个键
+        data.put("accessToken", result.getQueryCode());
         data.put("saved", !result.isFake());
         return ApiResponse.ok(data);
     }
 
-    /** 凭单号 + 访问令牌查进度 */
+    /** 凭单号 + 查询密码查进度 */
     @GetMapping("/{ticketNo}")
     public ApiResponse<TicketPublicView> detail(@PathVariable String ticketNo,
-                                                @RequestHeader(value = "X-Ticket-Auth", required = false) String auth) {
-        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth);
+                                                @RequestHeader(value = "X-Ticket-Auth", required = false) String auth,
+                                                HttpServletRequest request) {
+        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth, clientIp(request));
         return ApiResponse.ok(ticketService.publicDetail(ticket));
     }
 
@@ -117,8 +123,9 @@ public class PublicTicketController {
     @PostMapping("/{ticketNo}/reply")
     public ApiResponse<Boolean> reply(@PathVariable String ticketNo,
                                       @RequestHeader(value = "X-Ticket-Auth", required = false) String auth,
-                                      @Valid @RequestBody ReporterReplyRequest req) {
-        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth);
+                                      @Valid @RequestBody ReporterReplyRequest req,
+                                      HttpServletRequest request) {
+        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth, clientIp(request));
         ticketService.reporterReply(ticket, req.getRemark(), req.getImageKeys());
         return ApiResponse.ok(true);
     }
@@ -126,8 +133,9 @@ public class PublicTicketController {
     /** 报修人确认已解决 */
     @PostMapping("/{ticketNo}/confirm")
     public ApiResponse<Boolean> confirm(@PathVariable String ticketNo,
-                                       @RequestHeader(value = "X-Ticket-Auth", required = false) String auth) {
-        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth);
+                                       @RequestHeader(value = "X-Ticket-Auth", required = false) String auth,
+                                       HttpServletRequest request) {
+        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth, clientIp(request));
         ticketService.reporterConfirm(ticket);
         return ApiResponse.ok(true);
     }
@@ -136,8 +144,9 @@ public class PublicTicketController {
     @PostMapping("/{ticketNo}/reopen")
     public ApiResponse<Boolean> reopen(@PathVariable String ticketNo,
                                        @RequestHeader(value = "X-Ticket-Auth", required = false) String auth,
-                                       @Valid @RequestBody ReporterReopenRequest req) {
-        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth);
+                                       @Valid @RequestBody ReporterReopenRequest req,
+                                       HttpServletRequest request) {
+        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth, clientIp(request));
         ticketService.reporterReopen(ticket, req.getReason());
         return ApiResponse.ok(true);
     }
@@ -146,21 +155,23 @@ public class PublicTicketController {
     @PostMapping("/{ticketNo}/rate")
     public ApiResponse<Boolean> rate(@PathVariable String ticketNo,
                                      @RequestHeader(value = "X-Ticket-Auth", required = false) String auth,
-                                     @Valid @RequestBody ReporterRateRequest req) {
-        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth);
+                                     @Valid @RequestBody ReporterRateRequest req,
+                                     HttpServletRequest request) {
+        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth, clientIp(request));
         ticketService.reporterRate(ticket, req.getRating(), req.getComment());
         return ApiResponse.ok(true);
     }
 
     /**
-     * 图片代理：先认令牌，再把 OSS 对象吐出去。
+     * 图片代理：先认查询密码，再把 OSS 对象吐出去。
      * 只允许读取该工单自己登记的 key，避免拿别人的单号读别人的附件。
      */
     @GetMapping("/{ticketNo}/image")
     public ResponseEntity<byte[]> image(@PathVariable String ticketNo,
                                        @RequestParam String key,
-                                       @RequestHeader(value = "X-Ticket-Auth", required = false) String auth) {
-        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth);
+                                       @RequestHeader(value = "X-Ticket-Auth", required = false) String auth,
+                                       HttpServletRequest request) {
+        ServiceTicketEntity ticket = ticketService.requireVisitorAccess(ticketNo, auth, clientIp(request));
         if (ticketService.findImage(ticket, key) == null) {
             throw new BizException(40303, "图片不属于该工单");
         }

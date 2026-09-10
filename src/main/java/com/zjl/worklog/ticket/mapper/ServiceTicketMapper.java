@@ -56,13 +56,27 @@ public interface ServiceTicketMapper {
 
     /** 报修人退回时清空完成时间，否则列表会继续显示上一次的处理完成时间 */
     int clearDoneTime(@Param("id") Long id);
+
+    /**
+     * 自动确认扫描：取「待报修人确认」且标记完成时间早于 deadline 的工单ID。
+     *
+     * <p>这里只负责筛选、不负责改状态：状态跃迁由调用方逐条带前置条件 CAS，
+     * 好让「报修人刚好在这一刻点了还没解决」能赢过定时任务。
+     */
+    List<Long> selectConfirmTimeoutIds(@Param("deadline") LocalDateTime deadline,
+                                       @Param("limit") int limit);
     /** 报修人评价 */
     int updateRating(@Param("id") Long id,
                      @Param("rating") Integer rating,
                      @Param("ratingComment") String ratingComment);
 
-    /** 单号序列：统计当天已生成的单号数量（并发冲突由 uk_ticket_no + 重试兜底） */
-    long countByNoPrefix(@Param("prefix") String prefix);
+    /**
+     * 回填对外单号。
+     *
+     * <p>单号是「自增 ID + 基数」，必须先插入拿到 ID 才能算出来，所以插入时 ticket_no 留空。
+     * 调用方必须和 insert 处在同一个事务里，否则会出现没有单号的工单。
+     */
+    int updateTicketNo(@Param("id") Long id, @Param("ticketNo") String ticketNo);
 
     /** 渠道当日提交数，用于渠道日配额兜底（内存限流重启会清零，这条不会） */
     long countTodayByChannel(@Param("channelId") Long channelId);

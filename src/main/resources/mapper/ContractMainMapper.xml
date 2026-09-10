@@ -19,6 +19,7 @@
 
         <result column="contract_amount" property="contractAmount"/>
         <result column="paid_amount" property="paidAmount"/>
+        <result column="remain_amount" property="remainAmount"/>
         <result column="total_plan_count" property="totalPlanCount"/>
         <result column="paid_plan_count" property="paidPlanCount"/>
         <result column="start_date" property="startDate"/>
@@ -83,6 +84,7 @@
                t.customer_id, t.customer_name, t.supplier_id, t.supplier_name,
                t.contract_amount,
                COALESCE(pp.paid_amount, 0) AS paid_amount,
+               (t.contract_amount - COALESCE(pp.paid_amount, 0)) AS remain_amount,
                COALESCE(pp.total_plan_count, 0) AS total_plan_count,
                COALESCE(pp.paid_plan_count, 0) AS paid_plan_count,
                t.start_date, t.end_date, t.is_long_term, t.sign_date,
@@ -94,7 +96,7 @@
         LEFT JOIN contract_main origin ON t.renew_from_id = origin.id
         LEFT JOIN (
             SELECT contract_id,
-                   SUM(CASE WHEN actual_amount IS NOT NULL AND status = 20 THEN actual_amount ELSE 0 END) AS paid_amount,
+                   SUM(COALESCE(actual_amount, 0)) AS paid_amount,
                    COUNT(1) AS total_plan_count,
                    SUM(CASE WHEN status = 20 THEN 1 ELSE 0 END) AS paid_plan_count
             FROM contract_payment_plan

@@ -269,7 +269,7 @@ onMounted(fetchPage)
           <el-table-column label="模板" width="90">
             <template #default="{ row }">
               <el-tag v-if="hasTemplate(row)" type="success" size="small">已配置</el-tag>
-              <span v-else style="color: #94a3b8;">—</span>
+              <span v-else style="color: var(--g-text-faint);">—</span>
             </template>
           </el-table-column>
           <el-table-column prop="status" label="状态" width="100">
@@ -376,17 +376,17 @@ onMounted(fetchPage)
 
 .titleIcon {
   font-size: 22px;
-  color: #3b82f6;
+  color: var(--g-text);
 }
 
 .title {
   font-size: 18px;
   font-weight: 900;
-  color: #111827;
+  color: var(--g-text);
 }
 
 .card {
-  border-radius: 14px;
+  border-radius: var(--g-radius-md);
 }
 
 .filter-bar {
@@ -417,3 +417,4 @@ onMounted(fetchPage)
   align-items: center;
 }
 </style>
+

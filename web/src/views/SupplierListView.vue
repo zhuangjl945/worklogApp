@@ -1,8 +1,10 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { OfficeBuilding } from '@element-plus/icons-vue'
+import { OfficeBuilding, Search } from '@element-plus/icons-vue'
 import { supplierDisable, supplierEnable, supplierPage } from '../api/supplier'
+import QueryConsole from '../components/QueryConsole.vue'
+import { useQueryConsole } from '../composables/useQueryConsole'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -46,13 +48,68 @@ function onSizeChange(size) {
   load()
 }
 
+// ------------------------------------------------------------
+// 检索台：条件一变就自动重查，不再需要「查询」按钮
+// ------------------------------------------------------------
+
+// 只对筛选字段敏感，翻页、改每页条数不应触发重查
+const filterSignature = computed(() =>
+  JSON.stringify({
+    supplierCode: filters.supplierCode.trim(),
+    supplierName: filters.supplierName.trim(),
+    deleted: filters.deleted
+  })
+)
+
+function runQuery() {
+  filters.page = 1
+  load()
+}
+
+const { expanded: filterExpanded, run: runSearch } = useQueryConsole({
+  getSignature: () => filterSignature.value,
+  runQuery
+})
+
 function onReset() {
   filters.supplierCode = ''
   filters.supplierName = ''
   filters.deleted = null
-  filters.page = 1
-  load()
+  runSearch()
 }
+
+// deleted 是库里的字段名，界面上说人话：启用 / 禁用
+const statusPills = [
+  { value: 0, label: '启用' },
+  { value: 1, label: '禁用' }
+]
+
+function pickStatus(value) {
+  filters.deleted = filters.deleted === value ? null : value
+}
+
+const filterChips = computed(() => {
+  const chips = []
+  const name = filters.supplierName.trim()
+  if (name) chips.push({ key: 'supplierName', field: '名称', value: `含「${name}」` })
+  const code = filters.supplierCode.trim()
+  if (code) chips.push({ key: 'supplierCode', field: '编码', value: code })
+  if (filters.deleted !== null) {
+    chips.push({ key: 'deleted', field: '状态', value: statusPills.find((x) => x.value === filters.deleted).label })
+  }
+  return chips
+})
+
+function removeFilterChip(key) {
+  if (key === 'supplierName') filters.supplierName = ''
+  else if (key === 'supplierCode') filters.supplierCode = ''
+  else if (key === 'deleted') filters.deleted = null
+}
+
+const hiddenActiveFilterCount = computed(() => {
+  if (filterExpanded.value) return 0
+  return filters.supplierCode.trim() ? 1 : 0
+})
 
 async function onStatusChange(row, newValue) {
   const isEnabling = newValue === 0
@@ -93,27 +150,52 @@ onMounted(load)
       </div>
     </div>
 
+    <QueryConsole
+      class="qc-block"
+      v-model:expanded="filterExpanded"
+      :chips="filterChips"
+      :hidden-active-count="hiddenActiveFilterCount"
+      :result-text="'共 ' + total + ' 条'"
+      :busy="loading"
+      @remove-chip="removeFilterChip"
+      @clear-all="onReset"
+    >
+      <template #search>
+        <el-input v-model="filters.supplierName" class="qc-search" placeholder="搜索供应商名称，回车即查" clearable @keyup.enter="runSearch">
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </template>
+
+      <template #inline>
+        <span class="qc-flabel">状态</span>
+        <div class="qc-pills" role="group" aria-label="按状态筛选">
+          <button
+            v-for="opt in statusPills"
+            :key="opt.value"
+            type="button"
+            class="qc-pill"
+            :class="{ 'is-on': filters.deleted === opt.value }"
+            :aria-pressed="filters.deleted === opt.value"
+            @click="pickStatus(opt.value)"
+          >
+            <span class="qc-pill-dot" aria-hidden="true" />{{ opt.label }}
+          </button>
+        </div>
+      </template>
+
+      <template #more>
+        <div class="qc-grid">
+          <div class="qc-cell">
+            <span class="qc-flabel">供应商编码</span>
+            <el-input v-model="filters.supplierCode" placeholder="完整编码，精确匹配" clearable @keyup.enter="runSearch" />
+          </div>
+        </div>
+      </template>
+    </QueryConsole>
+
     <el-card class="card" shadow="never">
-      <div class="filter-bar">
-        <el-form :model="filters" inline class="filter-form">
-          <el-form-item label="供应商编码">
-            <el-input v-model="filters.supplierCode" placeholder="精确匹配" clearable />
-          </el-form-item>
-          <el-form-item label="供应商名称">
-            <el-input v-model="filters.supplierName" placeholder="模糊搜索" clearable />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="filters.deleted" placeholder="全部" clearable style="width: 120px">
-              <el-option label="启用" :value="0" />
-              <el-option label="禁用" :value="1" />
-            </el-select>
-          </el-form-item>
-          <el-form-item class="action-buttons">
-            <el-button type="primary" @click="load">查询</el-button>
-            <el-button @click="onReset">重置</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
 
       <el-table v-loading="loading" :data="tableData" border stripe :row-class-name="({ row }) => row.deleted === 1 ? 'row-disabled' : ''">
         <el-table-column prop="id" label="ID" width="90" />
@@ -169,14 +251,13 @@ onMounted(load)
 .page { padding: 18px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .titleWrap { display: flex; align-items: center; gap: 8px; }
-.titleIcon { font-size: 22px; color: #3b82f6; }
-.title { font-size: 18px; font-weight: 900; color: #111827; }
+.titleIcon { font-size: 22px; color: var(--g-text); }
+.title { font-size: 18px; font-weight: 900; color: var(--g-text); }
 .actions { display: flex; align-items: center; gap: 10px; }
-.card { border-radius: 14px; }
-.filter-bar { margin-bottom: 14px; }
-.filter-form { display: flex; flex-wrap: wrap; gap: 10px; }
+.card { border-radius: var(--g-radius-md); }
 .pagination { margin-top: 14px; }
 .row-disabled {
-  color: #9ca3af;
+  color: var(--g-text-faint);
 }
 </style>
+

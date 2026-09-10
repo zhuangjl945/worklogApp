@@ -39,14 +39,17 @@ export async function fetchUploadPolicy(formToken, filename) {
 
 /** 提交问题 */
 export async function submitTicket(payload) {
-  return await publicHttp.post('/', payload)
+  // 必须打到 /api/public/tickets（无尾斜杠）。axios 的 post('/') 会变成
+  // /api/public/tickets/，Spring Boot 3 默认不匹配尾斜杠，请求会落到静态资源
+  // 并返回「No static resource api/public/tickets」，手机端表现为提交失败。
+  return await publicHttp.post('', payload)
 }
 
 function authHeader(accessToken) {
   return { 'X-Ticket-Auth': accessToken || '' }
 }
 
-/** 凭单号 + 访问令牌查进度 */
+/** 凭单号 + 查询密码查进度；请求头名沿用 X-Ticket-Auth，值就是那 6 位查询密码 */
 export async function fetchTicketDetail(ticketNo, accessToken) {
   return await publicHttp.get(`/${encodeURIComponent(ticketNo)}`, { headers: authHeader(accessToken) })
 }

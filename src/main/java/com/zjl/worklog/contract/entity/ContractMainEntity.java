@@ -19,7 +19,10 @@ public class ContractMainEntity {
     private String supplierName;
 
     private BigDecimal contractAmount;
+    /** 实际付款金额合计（来自付款计划实付） */
     private BigDecimal paidAmount;
+    /** 付款余额：合同总额 - 实际付款金额 */
+    private BigDecimal remainAmount;
     private Integer totalPlanCount; // 总期数
     private Integer paidPlanCount;  // 已付期数
     private LocalDate startDate;

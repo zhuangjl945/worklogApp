@@ -70,8 +70,9 @@ onMounted(load)
 .page { padding: 18px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .titleWrap { display: flex; align-items: center; gap: 8px; }
-.titleIcon { font-size: 22px; color: #3b82f6; }
-.title { font-size: 18px; font-weight: 900; color: #111827; }
+.titleIcon { font-size: 22px; color: var(--g-text); }
+.title { font-size: 18px; font-weight: 900; color: var(--g-text); }
 .actions { display: flex; align-items: center; gap: 10px; }
-.card { border-radius: 14px; }
+.card { border-radius: var(--g-radius-md); }
 </style>
+

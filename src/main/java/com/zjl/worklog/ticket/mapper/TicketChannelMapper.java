@@ -28,4 +28,7 @@ public interface TicketChannelMapper {
 
     /** 同一科室下渠道名称查重（便于管理员分辨贴在哪里的码） */
     TicketChannelEntity selectByName(@Param("deptId") Long deptId, @Param("channelName") String channelName);
+
+    /** 同一受理科室下，某业务科室当前启用的渠道（一码一科室） */
+    TicketChannelEntity selectEnabledByBizDept(@Param("deptId") Long deptId, @Param("bizDeptId") Long bizDeptId);
 }

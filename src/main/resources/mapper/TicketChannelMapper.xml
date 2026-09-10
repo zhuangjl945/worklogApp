@@ -10,6 +10,7 @@
         <result column="channel_code" property="channelCode"/>
         <result column="channel_name" property="channelName"/>
         <result column="dept_id" property="deptId"/>
+        <result column="biz_dept_id" property="bizDeptId"/>
         <result column="default_category_id" property="defaultCategoryId"/>
         <result column="need_phone" property="needPhone"/>
         <result column="daily_limit" property="dailyLimit"/>
@@ -21,16 +22,16 @@
     </resultMap>
 
     <sql id="BaseColumns">
-        id, channel_code, channel_name, dept_id, default_category_id, need_phone,
+        id, channel_code, channel_name, dept_id, biz_dept_id, default_category_id, need_phone,
         daily_limit, remark, status, create_time, update_time
     </sql>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ticket_channel (
-            channel_code, channel_name, dept_id, default_category_id, need_phone,
+            channel_code, channel_name, dept_id, biz_dept_id, default_category_id, need_phone,
             daily_limit, remark, status
         ) VALUES (
-            #{channelCode}, #{channelName}, #{deptId}, #{defaultCategoryId}, #{needPhone},
+            #{channelCode}, #{channelName}, #{deptId}, #{bizDeptId}, #{defaultCategoryId}, #{needPhone},
             #{dailyLimit}, #{remark}, #{status}
         )
     </insert>
@@ -39,6 +40,7 @@
         UPDATE ticket_channel
         <set>
             <if test="channelName != null">channel_name = #{channelName},</if>
+            <if test="bizDeptId != null">biz_dept_id = #{bizDeptId},</if>
             <if test="defaultCategoryId != null">default_category_id = #{defaultCategoryId},</if>
             <if test="needPhone != null">need_phone = #{needPhone},</if>
             <if test="dailyLimit != null">daily_limit = #{dailyLimit},</if>
@@ -67,6 +69,13 @@
         SELECT <include refid="BaseColumns"/>
         FROM ticket_channel
         WHERE dept_id = #{deptId} AND channel_name = #{channelName}
+        LIMIT 1
+    </select>
+
+    <select id="selectEnabledByBizDept" resultMap="TicketChannelMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM ticket_channel
+        WHERE dept_id = #{deptId} AND biz_dept_id = #{bizDeptId} AND status = 1
         LIMIT 1
     </select>
 

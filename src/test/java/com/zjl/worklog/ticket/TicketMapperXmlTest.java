@@ -74,4 +74,21 @@ class TicketMapperXmlTest {
         assertTrue(sql.contains("source_type"), "work_record insert 缺少 source_type：" + sql);
         assertTrue(sql.contains("source_id"), "work_record insert 缺少 source_id：" + sql);
     }
+
+    @Test
+    @DisplayName("自动确认候选语句锁死「待报修人确认」状态，且带了条数上限")
+    void autoConfirmCandidateQueryIsGuarded() {
+        Configuration configuration = parseAll();
+        String sql = configuration.getMappedStatement("com.zjl.worklog.ticket.mapper.ServiceTicketMapper.selectConfirmTimeoutIds")
+                .getBoundSql(new java.util.HashMap<String, Object>())
+                .getSql();
+        // 丢了 status = 20 就会连处理中的工单一起替报修人确认掉，这是这条任务最危险的失败方式
+        assertTrue(sql.contains("status = 20"), "自动确认候选没锁定待确认状态：" + sql);
+        assertTrue(sql.contains("deleted = 0"), "自动确认候选漏了软删过滤：" + sql);
+        // 丢了上限，「参数刚打开、积压一夜」就会一轮改动全库工单
+        assertTrue(sql.toUpperCase().contains("LIMIT"), "自动确认候选缺少批量上限：" + sql);
+        // 起点用完成时间，且要兜住完成时间为空的历史脏数据
+        assertTrue(sql.contains("done_time"), "自动确认候选没有按完成时间筛选：" + sql);
+        assertTrue(sql.contains("COALESCE"), "自动确认候选没有兜住 done_time 为空的数据：" + sql);
+    }
 }

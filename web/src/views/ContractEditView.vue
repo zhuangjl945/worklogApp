@@ -7,7 +7,7 @@ import { contractCreate, contractDetail, contractUpdate } from '../api/contract'
 import { me } from '../api/auth'
 import { supplierPage, supplierCreate, supplierNextCode } from '../api/supplier'
 import { deptTree, deptMyRootChildren } from '../api/dept'
-import { userPage } from '../api/user'
+import { userRoster } from '../api/user'
 import { ossDeleteObject } from '../api/work'
 import { parseFileUrlList, uploadToOss } from '../utils/oss'
 import FilePreviewDialog from '../components/FilePreviewDialog.vue'
@@ -145,8 +145,9 @@ async function loadDepts() {
 
 async function loadManagers(query) {
   try {
-    const resp = await userPage({ realName: query, size: 2000, deptIds: myRootDeptIds.value?.join?.(',') })
-    managers.value = resp.data.records
+    // 选人只要花名册：/users 分页现在是系统管理员专属，普通员工拿它会 403
+    const resp = await userRoster({ realName: query, size: 200, deptIds: myRootDeptIds.value?.join?.(',') })
+    managers.value = resp.data || []
   } catch (e) {}
 }
 
@@ -579,7 +580,7 @@ onMounted(async () => {
 <style scoped>
 .page {
   padding: 0;
-  background-color: #f5f7fa;
+  background-color: var(--g-bg-subtle);
   min-height: calc(100vh - 60px);
 }
 
@@ -596,7 +597,7 @@ onMounted(async () => {
 .page-header {
   margin-bottom: 32px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--g-border);
 }
 
 .titleWrap {
@@ -607,13 +608,13 @@ onMounted(async () => {
 
 .titleIcon {
   font-size: 24px;
-  color: #409eff;
+  color: var(--g-text);
 }
 
 .title {
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--g-text);
 }
 
 .form {
@@ -631,7 +632,7 @@ onMounted(async () => {
 .divider-text {
   font-size: 15px;
   font-weight: 600;
-  color: #606266;
+  color: var(--g-text-secondary);
 }
 
 .upload-item {
@@ -640,23 +641,23 @@ onMounted(async () => {
 
 .upload-tip {
   font-size: 13px;
-  color: #909399;
+  color: var(--g-text-muted);
   margin-top: 8px;
 }
 
 .uploaded-file {
   margin-top: 12px;
   padding: 10px 16px;
-  background-color: #f0f7ff;
+  background-color: var(--g-bg-subtle);
   border-radius: 4px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #d9ecff;
+  border: 1px solid var(--g-bg-muted);
 }
 
 .uploaded-file a {
-  color: #409eff;
+  color: var(--g-text);
   text-decoration: none;
   font-size: 14px;
   flex: 1;
@@ -683,7 +684,7 @@ onMounted(async () => {
 .plan-title {
   font-size: 14px;
   font-weight: 600;
-  color: #606266;
+  color: var(--g-text-secondary);
 }
 
 .plan-table {
@@ -694,11 +695,11 @@ onMounted(async () => {
   margin-top: 16px;
   text-align: right;
   font-size: 14px;
-  color: #606266;
+  color: var(--g-text-secondary);
 }
 
 .amount-tag {
-  color: #f56c6c;
+  color: var(--g-danger);
   font-weight: 700;
   font-size: 16px;
 }
@@ -706,7 +707,7 @@ onMounted(async () => {
 .bottom-actions {
   margin-top: 40px;
   padding: 24px 0;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--g-border);
   display: flex;
   justify-content: center;
   gap: 16px;
@@ -724,3 +725,4 @@ onMounted(async () => {
   margin: 20px 0 12px;
 }
 </style>
+

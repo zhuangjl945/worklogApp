@@ -29,8 +29,10 @@ function removeSaved(item) {
 async function lookup() {
   errorMsg.value = ''
   const no = ticketNo.value.trim().toUpperCase()
-  if (no.length < 8) {
-    errorMsg.value = '请输入完整单号，例如 ST20260908000123'
+  // 新单号是 ST100001 这种短流水，老单号是 ST20260908000123：两种形状都放过去，
+  // 长度下限卡到 8 只是为了不让「只输了个 ST」这种半成品打到后端去消耗失败配额
+  if (!/^ST\d{6,14}$/.test(no)) {
+    errorMsg.value = '请输入完整单号，例如 ST100001'
     return
   }
   // 本机存过这条工单就不用再输密码
@@ -41,7 +43,7 @@ async function lookup() {
   }
   if (!accessToken.value) {
     asking.value = true
-    errorMsg.value = '请输入查询密码（提交成功时那串，或当时截图保存的内容）'
+    errorMsg.value = '请输入查询密码（提交时你自己设的那 6 位数字）'
     return
   }
   checking.value = true
@@ -65,41 +67,51 @@ async function lookup() {
     </header>
 
     <main class="m-body">
+      <!-- 查询表单卡片 -->
       <div class="m-card">
         <div class="m-field">
-          <label class="m-label" for="q-no">单号</label>
-          <input id="q-no" class="m-input" v-model="ticketNo" maxlength="24" placeholder="ST20260908000123"
-                 autocapitalize="characters" autocomplete="off">
+          <label class="m-label" for="q-no">工单号</label>
+          <input id="q-no" class="m-input" v-model="ticketNo" maxlength="24" placeholder="ST100001"
+                 autocapitalize="characters" autocomplete="off"
+                 style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .02em">
         </div>
         <div v-if="asking" class="m-field">
           <label class="m-label" for="q-auth">查询密码</label>
-          <input id="q-auth" class="m-input" v-model="accessToken" maxlength="64" placeholder="提交成功时显示的那串字符"
+          <input id="q-auth" class="m-input" v-model="accessToken" maxlength="64" placeholder="6 位数字，如 472815"
                  autocomplete="off">
+          <div class="m-hint">
+            就是提交时你自己设的那 6 位数字。输错太多次这个单号会被临时锁住（默认 15 分钟），
+            以免别人猜你的号；实在想不起来就找受理科室按单号代查。
+          </div>
         </div>
         <div v-if="errorMsg" class="m-error">{{ errorMsg }}</div>
         <button class="m-btn" type="button" :disabled="checking" @click="lookup">
           {{ checking ? '查询中…' : '查询' }}
         </button>
-        <div class="m-hint">单号不含个人敏感信息，可以抄在纸上；查询密码只在你自己手机上。</div>
+        <div class="m-hint" style="margin-top: 10px">
+          单号可以抄在纸上，查询密码别写在一起——现在是「谁猜到号都能试」，全靠这 6 位数字挡住别人。
+          老工单（单号形如 ST20260908000123）仍填当初那串长字符。
+        </div>
       </div>
 
+      <!-- 本机记录列表 -->
       <div v-if="tickets.length" class="m-card">
-        <span class="m-label">本机记录</span>
-        <dl class="m-kv" v-for="item in tickets" :key="item.ticketNo"
-            style="border-top: 1px solid var(--line); padding: 10px 0; margin: 0">
-          <dd style="grid-column: 1 / -1">
-            <div style="display:flex;align-items:center;gap:8px">
-              <button class="m-btn ghost" style="flex:1;text-align:left" type="button" @click="openSaved(item)">
-                {{ item.ticketNo }}
-                <span v-if="item.title" style="color:var(--ink-soft);font-weight:400"> {{ item.title }}</span>
-              </button>
-              <button class="m-btn ghost danger" style="flex:0 0 auto;padding:10px 14px" type="button"
-                      @click="removeSaved(item)">删除
-              </button>
-            </div>
-          </dd>
-        </dl>
-        <div class="m-hint">这里只是手机上的快捷入口，删除不影响科室里的登记记录。</div>
+        <span class="m-section-title">本机记录</span>
+        <div v-for="item in tickets" :key="item.ticketNo" class="m-saved-item">
+          <button class="m-saved-item-main" type="button" @click="openSaved(item)">
+            <span class="m-saved-item-no">{{ item.ticketNo }}</span>
+            <span v-if="item.title" class="m-saved-item-title">{{ item.title }}</span>
+          </button>
+          <button class="m-saved-item-del" type="button" @click="removeSaved(item)">删除</button>
+        </div>
+        <div class="m-hint" style="margin-top: 12px">这里只是手机上的快捷入口，删除不影响科室里的登记记录。</div>
+      </div>
+
+      <!-- 没有本机记录时的友好提示 -->
+      <div v-else class="m-center" style="padding: 32px 24px">
+        <div class="m-center-ic">📋</div>
+        <div>本机暂无工单记录</div>
+        <p>提交过报修后，会自动出现在这里方便快速查看。</p>
       </div>
     </main>
   </div>

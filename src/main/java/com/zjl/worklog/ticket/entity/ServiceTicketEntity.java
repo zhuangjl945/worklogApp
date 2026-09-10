@@ -11,6 +11,8 @@ public class ServiceTicketEntity {
     private String ticketNo;
     private Long channelId;
     private Long deptId;
+    /** 问题所在科室；deptId 仍是受理科室（权限边界） */
+    private Long bizDeptId;
     private Long categoryId;
     private Integer status;
     private Integer urgency;

@@ -15,6 +15,7 @@ import java.util.List;
 public interface WorkRecordMapper {
 
     long count(@Param("userId") Long userId,
+               @Param("deptId") Long deptId,
                @Param("categoryId") Long categoryId,
                @Param("categoryIds") List<Long> categoryIds,
                @Param("statusIds") List<Integer> statusIds,
@@ -28,6 +29,7 @@ public interface WorkRecordMapper {
     List<WorkRecord> selectPage(@Param("offset") long offset,
                                @Param("size") long size,
                                @Param("userId") Long userId,
+                               @Param("deptId") Long deptId,
                                @Param("categoryId") Long categoryId,
                                @Param("categoryIds") List<Long> categoryIds,
                                @Param("statusIds") List<Integer> statusIds,
@@ -40,6 +42,12 @@ public interface WorkRecordMapper {
 
     WorkRecord selectById(@Param("id") Long id,
                           @Param("userId") Long userId);
+
+    /**
+     * 不带所有权条件的读取，仅供科室/管理员范围在做过 {@code DataScope} 判定后使用。
+     * 与 selectById 分开命名，是为了让「忘了带 user_id」这种错误在 review 时一眼可见。
+     */
+    WorkRecord selectByIdAny(@Param("id") Long id);
 
     List<WorkCategoryStat> statsByCategory(@Param("userId") Long userId,
                                            @Param("endTimeFrom") LocalDateTime endTimeFrom,

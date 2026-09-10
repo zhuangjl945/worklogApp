@@ -10,7 +10,8 @@ CREATE TABLE ticket_channel (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   channel_code VARCHAR(32) NOT NULL COMMENT '渠道编码，二维码 URL 里携带',
   channel_name VARCHAR(100) NOT NULL COMMENT '渠道名称，如「三楼机房报修」',
-  dept_id BIGINT NOT NULL COMMENT '受理科室ID（逻辑关联 dept.id）',
+  dept_id BIGINT NOT NULL COMMENT '受理科室ID（逻辑关联 dept.id，信息科）',
+  biz_dept_id BIGINT COMMENT '问题所在科室（逻辑关联 dept.id，一码一科室）',
   default_category_id BIGINT COMMENT '默认问题类型（work_category.id）',
   need_phone TINYINT NOT NULL DEFAULT 1 COMMENT '是否强制填写手机号：1-是，0-否',
   daily_limit INT NOT NULL DEFAULT 200 COMMENT '该渠道每日提交上限（防刷兜底）',
@@ -20,7 +21,8 @@ CREATE TABLE ticket_channel (
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   UNIQUE INDEX uk_channel_code (channel_code),
-  INDEX idx_dept_status (dept_id, status)
+  INDEX idx_dept_status (dept_id, status),
+  INDEX idx_dept_biz (dept_id, biz_dept_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='问题登记渠道（二维码）表';
 
 -- 问题工单主表
@@ -29,9 +31,12 @@ CREATE TABLE ticket_channel (
 --   0 待受理 / 10 处理中 / 20 待报修人确认 / 30 已完成 / 40 已关闭 / 50 已退回
 CREATE TABLE service_ticket (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
-  ticket_no VARCHAR(24) NOT NULL COMMENT '对外单号，形如 ST20260908000123，报修人凭此查询',
+  -- 单号 = ST + (100000 + 自增 ID)，形如 ST100001。列允许为空只为服务「先插入拿 ID、再同事务回填」这一步，
+  -- 事务里不会有第三条代码看到空单号；uk_ticket_no 依然是唯一约束，只是 MySQL 下多个 NULL 不算冲突
+  ticket_no VARCHAR(24) NULL COMMENT '对外单号 ST+流水号（ST100001 起），报修人凭此 + 查询密码查进度',
   channel_id BIGINT NOT NULL COMMENT '来源渠道（逻辑关联 ticket_channel.id）',
   dept_id BIGINT NOT NULL COMMENT '受理科室ID（冗余自渠道，查询与权限边界用）',
+  biz_dept_id BIGINT COMMENT '问题所在科室（冗余自渠道，转工作记录业务科室）',
   category_id BIGINT COMMENT '问题类型（work_category.id，必须属于受理科室）',
   status TINYINT NOT NULL DEFAULT 0 COMMENT '当前状态，见枚举说明',
   urgency TINYINT NOT NULL DEFAULT 2 COMMENT '紧急度：1-紧急(4h) 2-普通(24h) 3-一般(72h)',
@@ -41,7 +46,8 @@ CREATE TABLE service_ticket (
   contact_name VARCHAR(50) COMMENT '报修人姓名/工号',
   contact_phone VARCHAR(20) COMMENT '报修人手机，仅用于联系与限流',
   image_urls TEXT COMMENT '图片 objectKey 的 JSON 数组字符串（不存公网直链）',
-  access_token_hash CHAR(64) COMMENT '报修人查询令牌的 SHA-256；明文只在提交成功响应里出现一次',
+  -- 新单的明文是报修人自设的 6 位数字；存量老单存的仍是当初那串 32 位长令牌的摘要，摘要算法没变，老号照样查得动
+  access_token_hash CHAR(64) COMMENT '查询密码的 SHA-256；明文只在提交成功响应里回显一次',
   assignee_id BIGINT COMMENT '受理人 user.id，为空表示尚未受理',
   assignee_name VARCHAR(50) COMMENT '受理人姓名（冗余，列表展示避免联表）',
   work_record_id BIGINT COMMENT '受理时生成的工作记录ID（双向定位）',
@@ -71,7 +77,7 @@ CREATE TABLE service_ticket_log (
   operator_type TINYINT NOT NULL COMMENT '操作人类型：0-报修人 1-员工 2-系统',
   operator_id BIGINT COMMENT '员工 user.id（operator_type=1 时有值）',
   operator_name VARCHAR(50) COMMENT '操作人展示名（冗余；报修人为匿名）',
-  action VARCHAR(30) NOT NULL COMMENT '动作：SUBMIT/ACCEPT/ASSIGN/REPLY/CONFIRM/REOPEN/DONE/REJECT/CLOSE/RATE',
+  action VARCHAR(30) NOT NULL COMMENT '动作：SUBMIT/ACCEPT/ASSIGN/REPLY/CONFIRM/AUTO_CONFIRM/REOPEN/DONE/REJECT/CLOSE/RATE',
   remark TEXT COMMENT '内容正文/回复内容/退回理由',
   image_urls TEXT COMMENT '本次附带的图片 objectKey JSON 数组',
   visible_to_reporter TINYINT NOT NULL DEFAULT 1 COMMENT '是否对报修人可见：1-可见，0-仅内部（内部备注）',
@@ -88,6 +94,27 @@ ALTER TABLE work_record
     COMMENT '来源主键（source_type=TICKET 时为 service_ticket.id）' AFTER source_type,
   ADD INDEX idx_source (source_type, source_id);
 
+-- ============================================================
+-- 已建库升级用：「报修人超时未确认自动确认」的扫描索引
+-- 定时任务每 5 分钟按 status = 20 + done_time 捞一轮积压，没索引就是全表扫
+-- 重复执行会报「Duplicate key name ...」，报了这个错说明已经加过，忽略即可
+-- ============================================================
+ALTER TABLE service_ticket
+  ADD INDEX idx_status_done (status, done_time);
+
 -- 已建库升级用：为默认渠道留一条示例（按需修改 dept_id 后再执行）
 -- INSERT INTO ticket_channel (channel_code, channel_name, dept_id, need_phone, remark)
 -- VALUES ('DEMO001', '信息科报修（示例，请删除）', 1, 1, '试点张贴于三楼机房门口');
+
+-- ============================================================
+-- 已建库升级用：单号改短流水 + 查询密码改「报修人自设 6 位数字」
+-- 老号（ST20260908000123，14 位）与新号（ST100001，8 位）长度不同、按精确串查询，
+-- 可以长期共存，历史数据不必迁移；只是新逻辑要「先插入拿自增 ID、再回填单号」，
+-- 所以必须先把 ticket_no 的非空约束放开，否则插入那一步就会报 NOT NULL。
+-- 重复执行是安全的（MODIFY 成相同定义无副作用）
+-- ============================================================
+ALTER TABLE service_ticket
+  MODIFY COLUMN ticket_no VARCHAR(24) NULL
+    COMMENT '对外单号 ST+流水号（ST100001 起），报修人凭此 + 查询密码查进度',
+  MODIFY COLUMN access_token_hash CHAR(64)
+    COMMENT '查询密码的 SHA-256；明文只在提交成功响应里回显一次';
