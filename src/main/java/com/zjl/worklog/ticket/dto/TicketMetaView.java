@@ -43,7 +43,7 @@ public class TicketMetaView {
     public static class UrgencyOption {
         private Integer code;
         private String name;
-        /** 该紧急度对应的 SLA 分钟数（与参数配置里填的值一致） */
+        /** 该紧急度对应的受理时限分钟数（与参数配置里填的值一致） */
         private Integer slaMinutes;
     }
 }

@@ -70,11 +70,12 @@
                 OR ticket_no = #{keyword}
             )
         </if>
-        <!-- 超时口径：未进终态且已过 SLA。这里的 0/10/20 与 TicketStatus.openCodes() 对应 -->
+        <!-- 超时口径：仍待受理，且已过提交时写入的最晚受理时刻 -->
         <if test="overdue != null and overdue == true">
             AND due_time IS NOT NULL
             AND due_time &lt; NOW()
-            AND status IN (0, 10, 20)
+            AND status = 0
+            AND accept_time IS NULL
         </if>
         <if test="createTimeFrom != null">
             AND create_time &gt;= #{createTimeFrom}

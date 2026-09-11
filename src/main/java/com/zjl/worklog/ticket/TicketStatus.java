@@ -57,7 +57,7 @@ public enum TicketStatus {
         return s == null ? ("未知状态(" + code + ")") : s.label;
     }
 
-    /** 是否终态：终态工单不再计入待办角标与超时统计 */
+    /** 是否终态：终态工单不再计入待办角标（受理超时只看待受理） */
     public boolean isFinal() {
         return this == CLOSED || this == REJECTED;
     }

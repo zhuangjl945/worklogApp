@@ -15,7 +15,6 @@ import {
 import { userRoster } from '../api/user'
 import { uploadToOss } from '../utils/oss'
 import { fetchTicketImage } from '../utils/ticketThumb'
-import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,7 +23,6 @@ const id = route.params.id
 const loading = ref(false)
 const busy = ref(false)
 const data = ref(null)
-const previewRef = ref()
 
 const replyText = ref('')
 const replyVisible = ref(true)
@@ -46,6 +44,11 @@ const urlMap = ref({})
 
 function shotSrc(key) {
   return urlMap.value[key] || ''
+}
+
+/** 预览列表必须与缩略图同序同长，不能 filter 空项，否则 :initial-index 会对错张 */
+function previewList(keys) {
+  return (keys || []).map((k) => shotSrc(k))
 }
 
 const allImageKeys = computed(() => {
@@ -88,9 +91,20 @@ function tagType(code) {
 
 function slaText() {
   const m = data.value?.slaRemainMinutes
-  if (m == null) return '未设定期望完成时间'
-  if (m < 0) return `已超时 ${formatSpan(-m)}`
-  return `剩余 ${formatSpan(m)}`
+  if (m == null) return '未设定受理时限'
+  // 时限只约束「多久内必须受理」：待受理才倒计时，受理后停表
+  if (data.value?.status === 0) {
+    if (m < 0) return `已超时未受理 ${formatSpan(-m)}`
+    return `剩余 ${formatSpan(m)} 需受理`
+  }
+  if (m < 0) return `超时受理（晚 ${formatSpan(-m)}）`
+  return '已按时受理'
+}
+
+function slaOverdue() {
+  return data.value?.status === 0
+    && data.value?.slaRemainMinutes != null
+    && data.value.slaRemainMinutes < 0
 }
 
 function formatSpan(minutes) {
@@ -263,7 +277,7 @@ function goRecords() {
           <span class="no">{{ data.ticketNo }}</span>
           <el-tag v-if="data.urgencyName" :type="urgencyTagType(data.urgency)" size="small" effect="plain">{{ data.urgencyName }}</el-tag>
         </div>
-        <div class="sla" :class="{ ov: data.slaRemainMinutes != null && data.slaRemainMinutes < 0 && [0, 10, 20].includes(data.status) }">
+        <div class="sla" :class="{ ov: slaOverdue() }">
           {{ slaText() }}
         </div>
         <div v-if="autoConfirmText" class="auto-confirm">{{ autoConfirmText }}</div>
@@ -291,7 +305,8 @@ function goRecords() {
 
         <div v-if="images.length" class="shots">
           <el-image v-for="(u, i) in images" :key="i" :src="shotSrc(u)" fit="cover" class="shot"
-                     @click="shotSrc(u) && previewRef?.open(shotSrc(u))">
+                     :preview-src-list="shotSrc(u) ? previewList(images) : []"
+                     :initial-index="i" preview-teleported>
             <template #error><div class="shot-empty">图片加载中…</div></template>
           </el-image>
         </div>
@@ -346,7 +361,8 @@ function goRecords() {
             <p v-if="l.remark" class="log-r">{{ l.remark }}</p>
             <div v-if="l.images && l.images.length" class="shots">
               <el-image v-for="(u, i) in l.images" :key="i" :src="shotSrc(u)" fit="cover" class="shot"
-                     @click="shotSrc(u) && previewRef?.open(shotSrc(u))">
+                     :preview-src-list="shotSrc(u) ? previewList(l.images) : []"
+                     :initial-index="i" preview-teleported>
             <template #error><div class="shot-empty">图片加载中…</div></template>
           </el-image>
             </div>
@@ -366,7 +382,6 @@ function goRecords() {
       </template>
     </el-dialog>
 
-    <FilePreviewDialog ref="previewRef" />
   </div>
 </template>
 

@@ -47,6 +47,9 @@ import java.util.Map;
 @RequireRole(value = Role.USER, message = "登录后才能使用问题受理台")
 public class TicketController {
 
+    /** 语音播报最多带几条明细：念两条以上就没人听完，后端按最急的排前面再截 */
+    private static final int VOICE_BRIEF_LIMIT = 5;
+
     private final TicketService ticketService;
     private final com.zjl.worklog.oss.OssObjectReader ossObjectReader;
 
@@ -111,6 +114,10 @@ public class TicketController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("deptPending", count.getDeptPending());
         data.put("mine", count.getMine());
+        // 播报明细只在确实有待受理时才多查一次：这个接口每半分钟就被轮询一回，没单的时候不值得再打一条 SQL
+        data.put("pendingBriefs", count.getDeptPending() > 0
+                ? ticketService.pendingBriefs(cu.getDeptId(), VOICE_BRIEF_LIMIT)
+                : List.of());
         return ApiResponse.ok(data);
     }
 

@@ -47,7 +47,7 @@ public class SysConfigController {
      *   <li>rate_limit.* → TicketService 的提交/渠道/手机号限流（走 SysConfigService 的 30 秒快照）</li>
      *   <li>system.jwt_expire_seconds → JwtTokenService 签发时读取（只允许缩短）</li>
      *   <li>upload.max_file_size_mb → OssController#policy 的直传大小上限</li>
-     *   <li>urgency.* / ticket_flow.* / ticket_form.* → TicketService 的 SLA、自动确认、登记表单必填规则</li>
+     *   <li>urgency.* / ticket_flow.* / ticket_form.* → TicketService 的受理时限、自动确认、登记表单必填规则</li>
      *   <li>logging.* → LoggingLevelService 立刻改 Logback 级别</li>
      * </ul>
      *

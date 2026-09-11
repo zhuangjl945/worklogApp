@@ -163,6 +163,8 @@ async function loadPendingTransfers() {
 
 // 手机端登记上来的待受理问题
 const pendingTicketCount = ref(0)
+// 播报明细：哪个科室的哪类问题，由 pending-count 顺带下发，没有就退回笼统播报
+const pendingTicketBriefs = ref([])
 const voiceAlertOn = ref(isVoiceAlertEnabled())
 let lastPendingTicketCount = null
 let speechUnlocked = false
@@ -174,7 +176,7 @@ function speakPendingNow() {
   const n = pendingTicketCount.value
   if (!voiceAlertOn.value || n <= 0) return false
   lastSpokenAt = Date.now()
-  return speakTicketAlert(announceText(n))
+  return speakTicketAlert(announceText(n, pendingTicketBriefs.value))
 }
 
 function speakPendingIfDue() {
@@ -190,6 +192,7 @@ async function loadPendingTickets() {
     const prev = lastPendingTicketCount
     lastPendingTicketCount = n
     pendingTicketCount.value = n
+    pendingTicketBriefs.value = Array.isArray(resp?.data?.pendingBriefs) ? resp.data.pendingBriefs : []
     if (n <= 0) {
       lastSpokenAt = 0
       return

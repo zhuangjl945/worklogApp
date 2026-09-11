@@ -91,4 +91,25 @@ class TicketMapperXmlTest {
         assertTrue(sql.contains("done_time"), "自动确认候选没有按完成时间筛选：" + sql);
         assertTrue(sql.contains("COALESCE"), "自动确认候选没有兜住 done_time 为空的数据：" + sql);
     }
+
+    @Test
+    @DisplayName("「只看超时」只捞仍待受理且过了最晚受理时刻的单")
+    void overdueFilterIsAcceptDeadlineOnly() {
+        String xml;
+        try (InputStream in = Thread.currentThread().getContextClassLoader()
+                .getResourceAsStream("mapper/ServiceTicketMapper.xml")) {
+            assertNotNull(in);
+            xml = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            fail(e);
+            return;
+        }
+        int overdueAt = xml.indexOf("overdue != null");
+        assertTrue(overdueAt > 0, "找不到 overdue 筛选片段");
+        String fragment = xml.substring(overdueAt, overdueAt + 450);
+        assertTrue(fragment.contains("status = 0"), "超时筛选必须锁死待受理：" + fragment);
+        assertTrue(fragment.contains("accept_time IS NULL"), "超时筛选应排除已受理：" + fragment);
+        assertTrue(!fragment.contains("status IN (0, 10, 20)"),
+                "超时筛选不能再把处理中/待确认算进去：" + fragment);
+    }
 }

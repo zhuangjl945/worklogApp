@@ -263,7 +263,7 @@ async function onSubmit() {
 }
 
 /**
- * 分段按钮一行四档，每格只有 60 多 px，「约 24 小时内响应」会被拆成三行竖排。
+ * 分段按钮一行四档，每格只有 60 多 px，「约 24 小时内受理」会被拆成三行竖排。
  * 这里只留时长；完整说法在工单详情里再看。
  */
 function formatSlaHint(minutes) {
@@ -412,6 +412,26 @@ async function again() {
           </div>
         </div>
 
+        <!--
+          查询凭证紧跟现场照片：单号是 ST100001 这种可预测的短流水，任何人抄到号就能凑出相邻的号，
+          所以「别人读不到我这条」完全靠下面这 6 位数字。它必填、每单不同，也不做成后台可关的参数。
+        -->
+        <div class="m-card">
+          <span class="m-section-title">查询密码 <span class="m-req">必填</span></span>
+          <div class="m-field">
+            <label class="m-label" for="f-code">自己设一个 6 位数字</label>
+            <div class="m-code-row">
+              <input id="f-code" class="m-input m-code-input" v-model="form.queryCode" maxlength="6"
+                     inputmode="numeric" autocomplete="off" placeholder="6 位数字" @input="onCodeInput">
+              <button class="m-btn ghost m-code-dice" type="button" @click="rollCode">帮我生成</button>
+            </div>
+            <div class="m-hint">
+              之后凭「单号 + 这个密码」查进度；只有你自己知道密码，别人才读不到你报的内容。
+              别照抄提示里的样例，也别用 111111、123456 这类一眼猜中的号。
+            </div>
+          </div>
+        </div>
+
         <!-- 分类与紧急程度 -->
         <div class="m-card">
           <span class="m-section-title">分类与优先级</span>
@@ -477,26 +497,6 @@ async function again() {
             <label class="m-label" for="f-phone">联系电话 <span v-if="needPhone" class="m-req">必填</span></label>
             <input id="f-phone" class="m-input" v-model="form.contactPhone" maxlength="20" inputmode="tel"
                    :placeholder="needPhone ? '手机、短号或内线均可' : '选填，手机/短号/内线'" @input="onPhoneInput">
-          </div>
-        </div>
-
-        <!--
-          查询凭证：单号是 ST100001 这种可预测的短流水，任何人抄到号就能凑出相邻的号，
-          所以「别人读不到我这条」完全靠下面这 6 位数字。它必填、每单不同，也不做成后台可关的参数。
-        -->
-        <div class="m-card">
-          <span class="m-section-title">查询密码 <span class="m-req">必填</span></span>
-          <div class="m-field">
-            <label class="m-label" for="f-code">自己设一个 6 位数字</label>
-            <div class="m-code-row">
-              <input id="f-code" class="m-input m-code-input" v-model="form.queryCode" maxlength="6"
-                     inputmode="numeric" autocomplete="off" placeholder="6 位数字" @input="onCodeInput">
-              <button class="m-btn ghost m-code-dice" type="button" @click="rollCode">帮我生成</button>
-            </div>
-            <div class="m-hint">
-              之后凭「单号 + 这个密码」查进度；只有你自己知道密码，别人才读不到你报的内容。
-              别照抄提示里的样例，也别用 111111、123456 这类一眼猜中的号。
-            </div>
           </div>
         </div>
 

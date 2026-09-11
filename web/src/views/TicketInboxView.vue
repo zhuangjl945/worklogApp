@@ -98,8 +98,12 @@ function statusTagType(code) {
 function remainText(row) {
   if (row.slaRemainMinutes == null) return '—'
   const m = row.slaRemainMinutes
-  if (m < 0) return `超时 ${fmtSpan(-m)}`
-  return `剩 ${fmtSpan(m)}`
+  if (row.status === 0) {
+    if (m < 0) return `超时 ${fmtSpan(-m)}`
+    return `剩 ${fmtSpan(m)}`
+  }
+  if (m < 0) return `超时受理 ${fmtSpan(-m)}`
+  return '按时受理'
 }
 
 function fmtSpan(minutes) {
@@ -110,7 +114,7 @@ function fmtSpan(minutes) {
 }
 
 function overdue(row) {
-  return row.slaRemainMinutes != null && row.slaRemainMinutes < 0 && [0, 10, 20].includes(row.status)
+  return row.status === 0 && row.slaRemainMinutes != null && row.slaRemainMinutes < 0
 }
 
 /** 状态列下补一行「多久后自动确认」，受理人才能解释这条待确认单不会一直挂着 */

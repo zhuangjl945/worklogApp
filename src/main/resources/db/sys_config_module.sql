@@ -55,12 +55,12 @@ INSERT INTO sys_config (config_group, config_key, config_value, config_label, co
 ('ticket_flow', 'auto_confirm_enabled', '1', '自动确认已解决',     '维修人员标记完成后，报修人在时限内未确认则由系统自动确认；关闭则一直等报修人亲手确认', 1),
 ('ticket_flow', 'auto_confirm_hours',   '8', '自动确认时限(小时)', '从标记完成时开始计时，1~168 小时；改完最迟下一轮扫描（约 5 分钟）生效，不用重启',      2),
 
--- 紧急程度（响应时限，管理员可自由调整）
--- sort_order = urgency code（工单里的 urgency 字段值），config_value = SLA 响应时限（分钟）
-('urgency', 'urgent',    '30',    '紧急',     '最高优先级，要求 30 分钟内响应',       1),
-('urgency', 'high',      '120',   '高',       '较高优先级，要求 2 小时内响应',        2),
-('urgency', 'normal',    '480',   '普通',     '一般优先级，要求 8 小时内响应',        3),
-('urgency', 'low',       '1440',  '低',       '低优先级，要求 24 小时内响应',         4),
+-- 紧急程度（受理时限，管理员可自由调整）
+-- sort_order = urgency code（工单里的 urgency 字段值），config_value = SLA 受理时限（分钟）
+('urgency', 'urgent',    '30',    '紧急',     '最高优先级，要求 30 分钟内受理',       1),
+('urgency', 'high',      '120',   '高',       '较高优先级，要求 2 小时内受理',        2),
+('urgency', 'normal',    '480',   '普通',     '一般优先级，要求 8 小时内受理',        3),
+('urgency', 'low',       '1440',  '低',       '低优先级，要求 24 小时内受理',         4),
 
 -- 日志级别（改完立刻生效，不用重启）。取值：TRACE / DEBUG / INFO / WARN / ERROR / OFF
 ('logging', 'root_level', 'INFO', '全局日志级别',   '整站默认级别；TRACE/DEBUG 会非常吵，生产建议 INFO 或 WARN', 1),

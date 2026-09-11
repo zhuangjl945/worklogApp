@@ -30,6 +30,7 @@ public class ServiceTicketEntity {
     private Long workRecordId;
     private String submitIp;
     private String submitUa;
+    /** 最晚受理时间（提交时按紧急度写入） */
     private LocalDateTime dueTime;
     private LocalDateTime acceptTime;
     private LocalDateTime doneTime;

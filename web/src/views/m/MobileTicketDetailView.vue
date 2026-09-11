@@ -257,7 +257,7 @@ function forget() {
               <dd>{{ detail.location }}</dd>
             </template>
             <template v-if="detail.dueTime">
-              <dt>期望完成</dt>
+              <dt>期望受理</dt>
               <dd>{{ detail.dueTime }}</dd>
             </template>
             <template v-if="detail.assigneeName">

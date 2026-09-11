@@ -53,7 +53,7 @@ public class TicketView {
     private Integer rating;
     private String ratingComment;
 
-    /** SLA 剩余分钟数，负数表示已超时；dueTime 为空时为 null */
+    /** 受理时限剩余分钟，负数表示超时未受理（已受理则按受理时刻停表）；dueTime 为空时为 null */
     private Long slaRemainMinutes;
 
     /**

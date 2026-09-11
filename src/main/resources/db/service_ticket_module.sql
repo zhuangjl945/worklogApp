@@ -53,7 +53,7 @@ CREATE TABLE service_ticket (
   work_record_id BIGINT COMMENT '受理时生成的工作记录ID（双向定位）',
   submit_ip VARCHAR(64) COMMENT '提交来源IP（限流与追溯）',
   submit_ua VARCHAR(255) COMMENT '提交 User-Agent 摘要',
-  due_time DATETIME COMMENT 'SLA 期望完成时间，提交时按紧急度推算',
+  due_time DATETIME COMMENT 'SLA 最晚受理时间，提交时按紧急度推算；受理后不再用此时限判断超时',
   accept_time DATETIME COMMENT '受理时间',
   done_time DATETIME COMMENT '处理完成时间',
   close_time DATETIME COMMENT '归档关闭时间',

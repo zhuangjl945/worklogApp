@@ -221,7 +221,7 @@ public class TicketService {
             options.add(new TicketMetaView.CategoryOption(c.getId(), c.getCategoryName()));
         }
         view.setCategories(options);
-        // 紧急程度从 sys_config 动态读取，管理员可在「参数配置」页面调整级别和响应时限
+        // 紧急程度从 sys_config 动态读取，管理员可在「参数配置」页面调整级别和受理时限
         List<UrgencyConfig> urgCfg = loadUrgencyOptions();
         List<TicketMetaView.UrgencyOption> urgOpts = new ArrayList<>();
         for (UrgencyConfig uc : urgCfg) {
@@ -350,7 +350,7 @@ public class TicketService {
         entity.setAccessTokenHash(TicketQueryCode.digest(queryCode));
         entity.setSubmitIp(ip);
         entity.setSubmitUa(abbreviate(userAgent, 255));
-        entity.setDueTime(LocalDateTime.now().plusMinutes(slaMinutes(entity.getUrgency())));
+        entity.setDueTime(LocalDateTime.now().plusMinutes(slaMinutes(entity.getUrgency()))); // 最晚受理时刻，不是完成时限
 
         // ticket_no 这一列允许为空就是为这一步服务的：自增 ID 唯一，所以短流水号不可能撞号，
         // 原来那段「撞唯一键就重试三轮」的逻辑随之删掉——并发提交不再会让报修人白填一遍表。
@@ -587,6 +587,70 @@ public class TicketService {
         return new PendingCount(deptPending, mine);
     }
 
+    /**
+     * 语音播报用的待受理摘要：取本科室最该动手的那几条待受理工单，只带念得出口的字段。
+     *
+     * <p>排序沿用 selectPage 的 due_time 升序，也就是受理时限最紧的排最前，于是播报里第一个念到的一定是最急的那条。
+     * 条数由调用方限死：值班台一次只听得进两条，剩下的用「等」带过就够了。
+     */
+    public List<PendingBrief> pendingBriefs(Long deptId, int limit) {
+        if (deptId == null || limit <= 0) {
+            return List.of();
+        }
+        List<ServiceTicketEntity> rows = ticketMapper.selectPage(0, limit, deptId,
+                List.of(TicketStatus.PENDING.code()), null, null, null, null, null, null);
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        // 紧急程度配置整批读一次就够，它是一组 sys_config 常量，逐条查纯属浪费
+        List<UrgencyConfig> urgCfg = loadUrgencyOptions();
+        List<PendingBrief> briefs = new ArrayList<>(rows.size());
+        for (ServiceTicketEntity e : rows) {
+            PendingBrief brief = new PendingBrief();
+            // 报修科室（来自登记渠道的业务科室），不是受理这条单子的本科室
+            brief.setBizDeptName(deptName(e.getBizDeptId()));
+            if (e.getCategoryId() != null) {
+                WorkCategory category = categoryMapper.selectById(e.getCategoryId(), deptId);
+                brief.setCategoryName(category == null ? null : category.getCategoryName());
+            }
+            // 标题只作分类缺失时的兜底，前端自己截断，这里不洗文本
+            brief.setTitle(e.getTitle());
+            brief.setUrgent(isUrgentCode(urgCfg, nz(e.getUrgency())));
+            briefs.add(brief);
+        }
+        return briefs;
+    }
+
+    /** 紧急程度的显示名：配置里查不到就返回 null，调用方按「无紧急度」处理 */
+    private String urgencyLabel(List<UrgencyConfig> opts, int code) {
+        for (UrgencyConfig uc : opts) {
+            if (uc.code() == code) {
+                return uc.label();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 「算不算加急」：只有比普通档要求更快响应的那几档才值得单独喊一句。
+     *
+     * <p>普通档按显示名定位；管理员把它改名导致找不到时退化成「只有最高优先级那档算加急」，
+     * 免得连中间档也念成加急，值班台听久了就不当回事了。
+     */
+    private boolean isUrgentCode(List<UrgencyConfig> opts, int code) {
+        if (opts.isEmpty()) {
+            return false;
+        }
+        UrgencyConfig normal = null;
+        for (UrgencyConfig uc : opts) {
+            if ("普通".equals(uc.label())) {
+                normal = uc;
+                break;
+            }
+        }
+        return normal == null ? code == opts.get(0).code() : code < normal.code();
+    }
+
     public TicketView detail(ServiceTicketEntity ticket) {
         TicketView view = toView(ticket, true);
         List<TicketView.LogLine> lines = new ArrayList<>();
@@ -711,7 +775,8 @@ public class TicketService {
      *
      * <p>不套用「分类模板必填校验」（applyCategoryTemplateRules）：那套规则约束的是人工登记时的填报规范，
      * 而工单在提交阶段已经完成了自己的必填校验；若在此套用，报修人没传图就会让受理直接失败，
-     * 等于把外部输入的质量问题变成科室无法受理的故障。这里把 endTime 设成 SLA 时间，语义正好一致。
+     * 等于把外部输入的质量问题变成科室无法受理的故障。
+     * 工单紧急度只约束「多久内必须受理」，不再写进工作记录的 endTime，避免 5 分钟档把待办立刻标成逾期。
      */
     private Long createWorkRecord(ServiceTicketEntity ticket, CurrentUser cu) {
         if (ticket.getWorkRecordId() != null) {
@@ -734,9 +799,6 @@ public class TicketService {
         record.setContent(buildRecordContent(ticket));
         record.setImageUrls(ticket.getImageUrls());
         record.setStartTime(ticket.getCreateTime() == null ? LocalDateTime.now() : ticket.getCreateTime());
-        record.setEndTime(ticket.getDueTime() == null
-                ? LocalDateTime.now().plusMinutes(slaMinutes(ticket.getUrgency()))
-                : ticket.getDueTime());
         // 紧急工单在待办列表里要能被标红，沿用工作记录既有的 is_important 语义
         // 紧急度 code 最小的 = 最高优先级，标记为重要
         List<UrgencyConfig> urgCfg = loadUrgencyOptions();
@@ -787,17 +849,9 @@ public class TicketService {
             view.setCategoryName(category == null ? null : category.getCategoryName());
         }
         // 紧急程度显示名从 sys_config 动态获取
-        for (UrgencyConfig uc : loadUrgencyOptions()) {
-            if (uc.code == nz(e.getUrgency())) {
-                view.setUrgencyName(uc.label);
-                break;
-            }
-        }
-        if (e.getDueTime() != null) {
-            boolean settled = TicketStatus.of(e.getStatus()) != null && TicketStatus.of(e.getStatus()).isFinal();
-            LocalDateTime to = settled && e.getCloseTime() != null ? e.getCloseTime() : LocalDateTime.now();
-            view.setSlaRemainMinutes(Duration.between(to, e.getDueTime()).toMinutes());
-        }
+        view.setUrgencyName(urgencyLabel(loadUrgencyOptions(), nz(e.getUrgency())));
+        view.setSlaRemainMinutes(acceptSlaRemainMinutes(
+                e.getDueTime(), e.getAcceptTime(), e.getStatus(), e.getUpdateTime(), LocalDateTime.now()));
         // 「待报修人确认」且自动确认开着时下发倒计时，受理台才能解释这条单子会自己变已完成
         LocalDateTime autoConfirmAt = autoConfirmDeadline(e);
         if (autoConfirmAt != null) {
@@ -859,7 +913,24 @@ public class TicketService {
     }
 
     /**
-     * 紧急度 -> SLA 分钟数。
+     * 受理时限剩余分钟：dueTime 是提交时写入的最晚受理时刻。
+     * 已受理按受理时刻停表；直接退回等从未受理就离开待受理的，按离开时刻停表。
+     */
+    static Long acceptSlaRemainMinutes(LocalDateTime dueTime, LocalDateTime acceptTime,
+                                       Integer status, LocalDateTime leftPendingAt, LocalDateTime now) {
+        if (dueTime == null || now == null) {
+            return null;
+        }
+        LocalDateTime to = acceptTime;
+        if (to == null) {
+            boolean pending = status != null && status == TicketStatus.PENDING.code();
+            to = pending ? now : (leftPendingAt != null ? leftPendingAt : now);
+        }
+        return Duration.between(to, dueTime).toMinutes();
+    }
+
+    /**
+     * 紧急度 -> 受理时限分钟数。
      * 从 sys_config urgency 分组动态读取；配置缺失时回退到硬编码默认值。
      */
     int slaMinutes(Integer urgency) {
@@ -976,7 +1047,7 @@ public class TicketService {
 
     /**
      * 从 sys_config 读取紧急程度配置列表。
-     * sort_order 作为 urgency code，config_value 作为 SLA 分钟数，config_label 作为显示名。
+     * sort_order 作为 urgency code，config_value 作为受理时限分钟数，config_label 作为显示名。
      */
     private List<UrgencyConfig> loadUrgencyOptions() {
         try {
@@ -998,7 +1069,7 @@ public class TicketService {
         }
     }
 
-    /** 紧急程度的运行时配置：code（即 urgency 字段值）、显示名、SLA 分钟数 */
+    /** 紧急程度的运行时配置：code（即 urgency 字段值）、显示名、受理时限分钟数 */
     private record UrgencyConfig(int code, String label, int slaMinutes) {}
 
     private static int nz(Integer value) {
@@ -1122,6 +1193,49 @@ public class TicketService {
 
         public long getMine() {
             return mine;
+        }
+    }
+
+    /** 语音播报的单条摘要：只留「哪个科室的哪类问题」这类念得出口的信息，正文图片一概不带 */
+    public static class PendingBrief {
+        /** 报修科室名（登记渠道的业务科室），不是受理科室 */
+        private String bizDeptName;
+        private String categoryName;
+        /** 分类缺失时的兜底念法 */
+        private String title;
+        /** 是否比普通档更急，前端据此决定要不要额外喊一句加急 */
+        private boolean urgent;
+
+        public String getBizDeptName() {
+            return bizDeptName;
+        }
+
+        public void setBizDeptName(String bizDeptName) {
+            this.bizDeptName = bizDeptName;
+        }
+
+        public String getCategoryName() {
+            return categoryName;
+        }
+
+        public void setCategoryName(String categoryName) {
+            this.categoryName = categoryName;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public boolean isUrgent() {
+            return urgent;
+        }
+
+        public void setUrgent(boolean urgent) {
+            this.urgent = urgent;
         }
     }
 }
