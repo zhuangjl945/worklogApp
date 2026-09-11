@@ -30,6 +30,21 @@ public final class OssKeys {
         return stripQueryAndSlash(v);
     }
 
+    /**
+     * 阿里云 Java SDK 在未显式指定 Protocol.HTTPS 时，generatePresignedUrl 经常给出 http://。
+     * 管理端页面走 https，浏览器会把 http 图片当混合内容直接拦掉，看起来就是「加载失败」。
+     * 签名串签的是 method/expires/resource，改 scheme 不影响验签。
+     */
+    public static String preferHttps(String url) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        if (url.regionMatches(true, 0, "http://", 0, 7)) {
+            return "https://" + url.substring(7);
+        }
+        return url;
+    }
+
     private static String stripQueryAndSlash(String value) {
         String v = value;
         int query = v.indexOf('?');

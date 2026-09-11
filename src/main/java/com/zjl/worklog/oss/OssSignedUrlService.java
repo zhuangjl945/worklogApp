@@ -95,7 +95,7 @@ public class OssSignedUrlService {
             for (String key : toSign) {
                 GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket, key, HttpMethod.GET);
                 request.setExpiration(expiration);
-                signedByKey.put(key, ossClient.generatePresignedUrl(request).toString());
+                signedByKey.put(key, OssKeys.preferHttps(ossClient.generatePresignedUrl(request).toString()));
             }
         } catch (BizException ex) {
             throw ex;

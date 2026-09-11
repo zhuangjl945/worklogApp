@@ -10,8 +10,8 @@ import { ossSignUrls } from '../api/oss'
  * 2) 图片流量不占应用服务器带宽，浏览器还能按签名 URL 自身命中缓存。
  * 3) 附件的「点开预览」继续走 FilePreviewDialog 的同源代理，两条路各管各的场景。
  *
- * 迁移友好：签名接口不可用（后端未升级、OSS 未配置、网络抖动）时退回原始地址，
- * 因此公开读 / 私有读两种状态下都不会整屏裂图。
+ * 签名失败时返回空串而不是原始地址：私有读 bucket 下原始地址必然 403，
+ * 交给 el-image 会立刻显示「加载失败」。调用方应在拿到非空地址后再绑 src。
  */
 
 /** 签名地址提前多少秒刷新，避免边界上正在渲染的图突然过期 */
@@ -26,6 +26,12 @@ const deadline = new Map()
 
 const waiting = new Set()
 let flushTimer = null
+
+function preferHttps(url) {
+  if (!url) return ''
+  if (url.slice(0, 7).toLowerCase() === 'http://') return 'https://' + url.slice(7)
+  return url
+}
 
 /** 已经问过且还在有效期内 */
 function isSettled(input) {
@@ -58,15 +64,15 @@ async function flush() {
     const ttlMs = (resp.data?.ttlSeconds || 300) * 1000
     const urls = resp.data?.urls || {}
     for (const input of batch) {
-      const url = urls[input]
+      const url = preferHttps(urls[input] || '')
       // null/缺项 = 后端判定越权或地址非法，按「已知取不到」记一笔，别死循环重试
-      resolved[input] = url || ''
+      resolved[input] = url
       deadline.set(input, Date.now() + (url ? Math.max(ttlMs - RENEW_AHEAD_MS, RENEW_AHEAD_MS) : NEGATIVE_TTL_MS))
     }
   } catch (e) {
-    // 换不到就暂时按原始地址渲染（公开读环境下照样能看图），静默期后自动重试
+    // 私有读 bucket 下原始地址本身就打不开，不能再回退成它，否则 el-image 会立刻「加载失败」
     for (const input of batch) {
-      resolved[input] = input
+      resolved[input] = ''
       deadline.set(input, Date.now() + NEGATIVE_TTL_MS)
     }
   }

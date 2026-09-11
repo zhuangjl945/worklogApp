@@ -1,5 +1,25 @@
 import { ossPolicy } from '../api/work'
 
+/**
+ * 与后端 OssKeys.toKey 对齐：完整地址 / 签名地址 / objectKey 都能还原出要删的 key。
+ */
+export function toOssKey(urlOrKey) {
+  if (!urlOrKey) return ''
+  const v = String(urlOrKey).trim()
+  if (!v) return ''
+  const scheme = v.indexOf('://')
+  let path = v
+  if (scheme >= 0) {
+    const slash = v.indexOf('/', scheme + 3)
+    if (slash < 0) return ''
+    path = v.slice(slash + 1)
+  }
+  const query = path.indexOf('?')
+  if (query >= 0) path = path.slice(0, query)
+  while (path.startsWith('/')) path = path.slice(1)
+  return path
+}
+
 export async function uploadToOss(file, dir) {
   const policyResp = await ossPolicy({
     dir,

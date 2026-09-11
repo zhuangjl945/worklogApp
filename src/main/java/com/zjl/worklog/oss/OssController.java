@@ -13,8 +13,6 @@ import com.zjl.worklog.common.exception.BizException;
 import com.zjl.worklog.config.SysConfigService;
 import com.zjl.worklog.security.CurrentUser;
 import com.zjl.worklog.security.UserContext;
-import com.zjl.worklog.security.RequireRole;
-import com.zjl.worklog.security.Role;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -171,7 +169,7 @@ public class OssController {
             request.setResponseHeaders(overrides);
 
             Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("url", ossClient.generatePresignedUrl(request).toString());
+            resp.put("url", OssKeys.preferHttps(ossClient.generatePresignedUrl(request).toString()));
             resp.put("contentType", contentType);
             resp.put("kind", kind);
             resp.put("previewable", previewable);
@@ -227,13 +225,11 @@ public class OssController {
     /**
      * 删除 OSS 对象。
      *
-     * <p>这是全站唯一一个「删了就没法恢复」的接口，所以门槛刻意比其他 OSS 接口更高：
-     * 1) 只有系统管理员能调——附件一旦删掉，工单/合同/工作记录里的引用全成死链，这类事故找回成本最高；
-     * 2) 仍被业务记录引用的 key 一律拒删，把「清理没提交的孤儿文件」和「误删在用文件」彻底分开；
-     * 3) 成功和被拒都记日志，事后可追责到具体的人。
+     * <p>登录用户即可调，真正的保险在引用检查：仍被工作记录/合同等引用的 key 一律拒删。
+     * 刚上传、还没点保存的图片不在任何业务行里，上传人必须能自己撤掉，否则表单上会留下删不掉的裂图。
+     * 成功和被拒都记日志，事后可追责到具体的人。
      */
     @DeleteMapping("/object")
-    @RequireRole(value = Role.ADMIN, message = "仅系统管理员可删除已上传的文件")
     public ApiResponse<Boolean> deleteObject(@RequestParam String key) {
         CurrentUser cu = requireLogin();
         ensureOssConfigured();

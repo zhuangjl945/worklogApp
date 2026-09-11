@@ -20,7 +20,7 @@ import { deptAllEnabled, deptMyRootChildren } from '../api/dept'
 import WorkRecordDetailDrawer from './WorkRecordDetailDrawer.vue'
 import { useQueryConsole } from '../composables/useQueryConsole'
 import QueryConsole from '../components/QueryConsole.vue'
-import { uploadToOss } from '../utils/oss'
+import { toOssKey, uploadToOss } from '../utils/oss'
 import { ensureSignedUrls, signedList, signedUrl } from '../utils/ossView'
 import {
   fillTemplatePattern,
@@ -518,14 +518,8 @@ async function handleCancelEdit(done) {
   const addedUrls = currentUrls.filter((u) => !originalImageUrls.value.includes(u))
 
   for (const url of addedUrls) {
-    const key = urlToOssKey(url)
-    if (!key) continue
-    try {
-      await ossDeleteObject({ key })
-    } catch (e) {
-      // 2A：静默失败，不阻塞关闭
-      console.error('清理未保存图片失败:', e)
-    }
+    revokeLocalPreview(url)
+    await tryDeleteOssObject(url)
   }
 
   showFullpageEdit.value = false
@@ -568,13 +562,30 @@ const contentImageUrls = computed(() => {
   return [...new Set(urls.filter(Boolean))]
 })
 
-function urlToOssKey(url) {
-  if (!url) return null
+const localPreviews = reactive({})
+
+function displaySrc(u) {
+  return localPreviews[u] || signedUrl(u) || ''
+}
+
+function previewSrcList(urls) {
+  return (urls || []).map((x) => displaySrc(x))
+}
+
+function revokeLocalPreview(url) {
+  const blob = localPreviews[url]
+  if (!blob) return
+  URL.revokeObjectURL(blob)
+  delete localPreviews[url]
+}
+
+async function tryDeleteOssObject(url) {
+  const key = toOssKey(url)
+  if (!key) return
   try {
-    const u = new URL(url)
-    return u.pathname?.replace(/^\//, '') || null
-  } catch {
-    return null
+    await ossDeleteObject({ key })
+  } catch (e) {
+    console.error('清理 OSS 图片失败:', e)
   }
 }
 
@@ -589,38 +600,24 @@ function removeImageRefFromContent(url) {
 
 async function deleteImage(url) {
   try {
-    await ElMessageBox.confirm('确认删除该图片吗？将同时删除 OSS 上的文件。', '提示', { type: 'warning' })
+    await ElMessageBox.confirm('确认删除该图片吗？', '提示', { type: 'warning' })
   } catch {
     return
   }
 
-  const key = urlToOssKey(url)
-  if (!key) {
-    ElMessage.error('无法解析图片 key')
-    return
-  }
-
+  // 先从本条表单拿掉，避免 OSS 删除被拒时裂图卡在页面上删不掉
+  let arr = []
   try {
-    await ossDeleteObject({ key })
-
-    // 从 imageUrls 中移除
-    let arr = []
-    try {
-      if (form.imageUrls) arr = JSON.parse(form.imageUrls)
-    } catch {
-      arr = []
-    }
-    arr = Array.isArray(arr) ? arr : []
-    arr = arr.filter((x) => x && x !== url)
-    form.imageUrls = arr.length > 0 ? JSON.stringify(arr) : ''
-
-    // 兼容：同时清理历史 content 中遗留的图片语法
-    removeImageRefFromContent(url)
-
-    ElMessage.success('图片已删除')
-  } catch (e) {
-    ElMessage.error(e?.message || '删除图片失败')
+    if (form.imageUrls) arr = JSON.parse(form.imageUrls)
+  } catch {
+    arr = []
   }
+  arr = Array.isArray(arr) ? arr.filter((x) => x && x !== url) : []
+  form.imageUrls = arr.length > 0 ? JSON.stringify(arr) : ''
+  removeImageRefFromContent(url)
+  revokeLocalPreview(url)
+  await tryDeleteOssObject(url)
+  ElMessage.success('图片已移除')
 }
 
 const rules = {
@@ -724,8 +721,8 @@ function cancelInlineCreate() {
   const currentUrls = contentImageUrls.value
   const addedUrls = currentUrls.filter((u) => !originalImageUrls.value.includes(u))
   for (const url of addedUrls) {
-    const key = urlToOssKey(url)
-    if (key) { try { ossDeleteObject({ key }) } catch (e) { /* 静默 */ } }
+    revokeLocalPreview(url)
+    tryDeleteOssObject(url)
   }
   showInlineCreate.value = false
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
@@ -793,10 +790,17 @@ async function submit() {
         await workRecordUpdate(currentId.value, payload)
         ElMessage.success('更新成功')
       }
-      originalImageUrls.value = parseUrls(form.imageUrls)
+      const kept = parseUrls(form.imageUrls)
+      const removed = originalImageUrls.value.filter((u) => !kept.includes(u))
+      originalImageUrls.value = kept
       if (editMode.value === "create") { showInlineCreate.value = false } else { showFullpageEdit.value = false }
       if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
       previewUrl.value = ''
+      for (const url of kept) revokeLocalPreview(url)
+      for (const url of removed) {
+        revokeLocalPreview(url)
+        tryDeleteOssObject(url)
+      }
       await load()
     } catch (e) {
       ElMessage.error(e?.message || '提交失败')
@@ -833,6 +837,12 @@ async function uploadImageFile(file) {
     }
     if (!urls.includes(imgUrl)) urls.push(imgUrl)
     form.imageUrls = JSON.stringify(urls)
+
+    // 签名地址换回来之前先用本地预览，避免 el-image 空 src 直接显示「加载失败」
+    if (previewUrl.value) {
+      localPreviews[imgUrl] = previewUrl.value
+      previewUrl.value = ''
+    }
 
     // 清理历史 content 中遗留的图片语法（避免内容框显示 URL）
     removeImageRefFromContent(imgUrl)
@@ -1152,7 +1162,16 @@ onMounted(async () => {
 
                   <div v-if="contentImageUrls.length > 0" class="inline-images">
                     <div v-for="u in contentImageUrls" :key="u" class="inline-image-item">
-                      <el-image :src="signedUrl(u)" style="width: 64px; height: 64px; border-radius: 8px;" fit="cover" :preview-src-list="signedList(contentImageUrls)" :initial-index="contentImageUrls.indexOf(u)" preview-teleported />
+                      <el-image
+                        v-if="displaySrc(u)"
+                        :src="displaySrc(u)"
+                        style="width: 64px; height: 64px; border-radius: 8px;"
+                        fit="cover"
+                        :preview-src-list="previewSrcList(contentImageUrls)"
+                        :initial-index="contentImageUrls.indexOf(u)"
+                        preview-teleported
+                      />
+                      <div v-else class="inline-image-pending" />
                       <el-button circle type="danger" :icon="Delete" size="small" class="inline-image-delete" @click.stop="deleteImage(u)" />
                     </div>
                   </div>
@@ -1212,13 +1231,14 @@ onMounted(async () => {
         <el-table-column label="图片" width="100">
           <template #default="{ row }">
             <el-image
-              v-if="getRowImageUrls(row).length > 0"
+              v-if="getRowImageUrls(row).length > 0 && signedUrl(getRowImageUrls(row)[0])"
               :src="signedUrl(getRowImageUrls(row)[0])"
               style="width: 46px; height: 30px; border-radius: 8px;"
               fit="cover"
               :preview-src-list="signedList(getRowImageUrls(row))"
               preview-teleported
             />
+            <span v-else-if="getRowImageUrls(row).length > 0">…</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -1332,7 +1352,16 @@ onMounted(async () => {
                   <el-image :src="previewUrl" class="fe-img" fit="cover" />
                 </div>
                 <div v-for="u in contentImageUrls" :key="u" class="fe-img-wrap">
-                  <el-image :src="signedUrl(u)" class="fe-img" fit="cover" :preview-src-list="signedList(contentImageUrls)" :initial-index="contentImageUrls.indexOf(u)" preview-teleported />
+                  <el-image
+                    v-if="displaySrc(u)"
+                    :src="displaySrc(u)"
+                    class="fe-img"
+                    fit="cover"
+                    :preview-src-list="previewSrcList(contentImageUrls)"
+                    :initial-index="contentImageUrls.indexOf(u)"
+                    preview-teleported
+                  />
+                  <div v-else class="fe-img fe-img-pending" />
                   <el-button circle type="danger" :icon="Delete" size="small" class="fe-img-del" @click.stop="deleteImage(u)" />
                 </div>
               </div>
@@ -1415,13 +1444,15 @@ onMounted(async () => {
             <div v-if="contentImageUrls.length > 0" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">
               <div v-for="u in contentImageUrls" :key="u" style="position: relative; width: 100px;">
                 <el-image
-                  :src="signedUrl(u)"
+                  v-if="displaySrc(u)"
+                  :src="displaySrc(u)"
                   style="width: 100px; height: 100px; border-radius: 10px;"
                   fit="cover"
-                  :preview-src-list="signedList(contentImageUrls)"
+                  :preview-src-list="previewSrcList(contentImageUrls)"
                   :initial-index="contentImageUrls.indexOf(u)"
                   preview-teleported
                 />
+                <div v-else class="fe-img fe-img-pending" />
                 <el-button
                   circle
                   type="danger"
@@ -1736,6 +1767,13 @@ onMounted(async () => {
   position: relative;
 }
 
+.inline-image-pending {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: #eef2f6;
+}
+
 .inline-image-delete {
   position: absolute;
   bottom: 4px;
@@ -1979,6 +2017,10 @@ onMounted(async () => {
   height: 100px;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
+}
+
+.fe-img-pending {
+  background: #eef2f6;
 }
 
 .fe-img-del {
