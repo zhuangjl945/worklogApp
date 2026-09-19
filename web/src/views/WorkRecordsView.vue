@@ -13,14 +13,13 @@ import {
   workRecordTransferCreate,
   workRecordWeeklyReport,
   workStatusEnabled,
-  ossDeleteObject
 } from '../api/work'
 import { userRoster } from '../api/user'
 import { deptAllEnabled, deptMyRootChildren } from '../api/dept'
 import WorkRecordDetailDrawer from './WorkRecordDetailDrawer.vue'
 import { useQueryConsole } from '../composables/useQueryConsole'
 import QueryConsole from '../components/QueryConsole.vue'
-import { toOssKey, uploadToOss } from '../utils/oss'
+import { removedUrls, tryDeleteOssObject, uploadToOss } from '../utils/oss'
 import { ensureSignedUrls, signedList, signedUrl } from '../utils/ossView'
 import {
   fillTemplatePattern,
@@ -579,15 +578,6 @@ function revokeLocalPreview(url) {
   delete localPreviews[url]
 }
 
-async function tryDeleteOssObject(url) {
-  const key = toOssKey(url)
-  if (!key) return
-  try {
-    await ossDeleteObject({ key })
-  } catch (e) {
-    console.error('清理 OSS 图片失败:', e)
-  }
-}
 
 function removeImageRefFromContent(url) {
   if (!url) return
@@ -762,6 +752,7 @@ function openEdit(row) {
 
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
+  originalImageUrls.value = parseUrls(form.imageUrls)
   showFullpageEdit.value = true
 }
 
@@ -791,7 +782,7 @@ async function submit() {
         ElMessage.success('更新成功')
       }
       const kept = parseUrls(form.imageUrls)
-      const removed = originalImageUrls.value.filter((u) => !kept.includes(u))
+      const removed = removedUrls(originalImageUrls.value, kept)
       originalImageUrls.value = kept
       if (editMode.value === "create") { showInlineCreate.value = false } else { showFullpageEdit.value = false }
       if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
@@ -899,7 +890,9 @@ async function changeStatus(row, statusId) {
 async function remove(row) {
   try {
     await ElMessageBox.confirm('确认删除该工作记录吗？（软删）', '提示', { type: 'warning' })
+    const urls = parseUrls(row.imageUrls)
     await workRecordDelete(row.id)
+    for (const url of urls) tryDeleteOssObject(url)
     ElMessage.success('已删除')
     await load()
   } catch (e) {

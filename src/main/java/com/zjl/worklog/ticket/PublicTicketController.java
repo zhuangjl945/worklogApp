@@ -42,19 +42,22 @@ public class PublicTicketController {
     private final TicketService ticketService;
     private final OssPolicyService ossPolicyService;
     private final com.zjl.worklog.oss.OssObjectReader ossObjectReader;
+    private final com.zjl.worklog.oss.OssDeleteService ossDeleteService;
 
     public PublicTicketController(TicketChannelService channelService,
                                   TicketFormTokenService formTokenService,
                                   TicketRateLimiter rateLimiter,
                                   TicketService ticketService,
                                   OssPolicyService ossPolicyService,
-                                  com.zjl.worklog.oss.OssObjectReader ossObjectReader) {
+                                  com.zjl.worklog.oss.OssObjectReader ossObjectReader,
+                                  com.zjl.worklog.oss.OssDeleteService ossDeleteService) {
         this.channelService = channelService;
         this.formTokenService = formTokenService;
         this.rateLimiter = rateLimiter;
         this.ticketService = ticketService;
         this.ossPolicyService = ossPolicyService;
         this.ossObjectReader = ossObjectReader;
+        this.ossDeleteService = ossDeleteService;
     }
 
     /** 第一步：扫码进来先换填表凭证（申请本身就受单 IP 限流约束） */
@@ -92,6 +95,26 @@ public class PublicTicketController {
         }
         String dir = TicketImageKeys.channelPrefix(ossDirPrefix(), channel.getChannelCode());
         return ApiResponse.ok(ossPolicyService.imagePolicy(dir, req.getFilename()));
+    }
+
+    /**
+     * 报修人撤掉刚上传、还没提交的图。
+     *
+     * <p>没有登录态，保险三层：填表凭证绑渠道、key 必须落在本渠道目录、引用检查拦已入库的图。
+     */
+    @PostMapping("/delete-object")
+    public ApiResponse<Boolean> deleteObject(@Valid @RequestBody DeleteObjectRequest req) {
+        Long channelId = formTokenService.require(req.getFormToken());
+        TicketChannelEntity channel = channelService.requireEnabledById(channelId);
+        if (!rateLimiter.acquire("delete:ch:" + channelId, 60, 60)) {
+            throw new BizException(42901, "操作过于频繁，请稍后再试");
+        }
+        String key = TicketImageKeys.toKey(req.getKey());
+        if (key.isEmpty() || !TicketImageKeys.belongsToChannel(ossDirPrefix(), channel.getChannelCode(), key)) {
+            throw new BizException(40303, "图片不属于当前登记入口");
+        }
+        ossDeleteService.deleteUnreferenced(key, "visitor:" + channel.getChannelCode());
+        return ApiResponse.ok(true);
     }
 
     /** 提交问题。"" 与 "/" 都要认：旧前端 axios.post('/') 会带尾斜杠，Boot 3 默认不匹配。 */
@@ -215,6 +238,31 @@ public class PublicTicketController {
 
         public void setChannelCode(String channelCode) {
             this.channelCode = channelCode;
+        }
+    }
+
+    public static class DeleteObjectRequest {
+        @NotBlank
+        @Size(max = 64)
+        private String formToken;
+        @NotBlank(message = "缺少图片")
+        @Size(max = 512)
+        private String key;
+
+        public String getFormToken() {
+            return formToken;
+        }
+
+        public void setFormToken(String formToken) {
+            this.formToken = formToken;
+        }
+
+        public String getKey() {
+            return key;
+        }
+
+        public void setKey(String key) {
+            this.key = key;
         }
     }
 

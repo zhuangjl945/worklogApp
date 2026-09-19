@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   fetchFormToken,
   fetchMeta,
   submitTicket,
+  tryDeleteTicketImage,
   uploadTicketImage
 } from '../../api/ticketPublic'
 import { compressImage } from '../../utils/imageCompress'
@@ -14,6 +15,8 @@ import {
   normalizeQueryCode,
   randomQueryCode,
   resolveFormRules,
+  stepBlockReason,
+  stepIndexForField,
   submitBlockReason
 } from '../../utils/ticketFormGuard'
 import './mobile.css'
@@ -48,6 +51,8 @@ const form = reactive({
 
 // 本地预览用（objectURL），与真正上传到 OSS 的 key 一一对应
 const shots = ref([])
+// 一次选多张时，上一张 finally 和下张 push 之间 uploading 会空一拍，用这个把整段选择包住
+const filePickBusy = ref(false)
 
 // 表单规则（哪些字段必填、最少几个字、照片至少几张）由服务端按「参数配置 → 登记表单」下发，
 // 页面只负责照着渲染标记和自己先拦一道；真正的裁决仍在服务端，两边读的是同一份参数。
@@ -76,7 +81,62 @@ function pickCategory(id) {
   keepDraft()
 }
 
+const STEPS = [
+  { key: 'problem', label: '发生了什么' },
+  { key: 'route', label: '去哪处理' },
+  { key: 'contact', label: '怎么联系你' }
+]
+const LAST_STEP = STEPS.length - 1
+const step = ref(0)
+
 const result = ref(null)
+
+function formPayload() {
+  return {
+    title: form.title,
+    content: form.content,
+    contactPhone: form.contactPhone,
+    contactName: form.contactName,
+    location: form.location,
+    queryCode: form.queryCode,
+    categoryId: form.categoryId,
+    categoryOptions: meta.value?.categories || [],
+    imageCount: form.imageKeys.length,
+    needPhone: needPhone.value,
+    uploading: filePickBusy.value || shots.value.some((s) => s.uploading),
+    rules: rules.value
+  }
+}
+
+async function goStep(next) {
+  step.value = next
+  window.scrollTo(0, 0)
+  await nextTick()
+}
+
+async function onNext() {
+  const payload = formPayload()
+  // 照片在第 0 步：后面两步的字段过滤会跳过 shots，上传未完成时不能翻页
+  if (payload.uploading) {
+    errorMsg.value = '照片还在上传，请稍候'
+    await focusField('shots')
+    return
+  }
+  const blocked = stepBlockReason(step.value, payload)
+  if (blocked) {
+    errorMsg.value = blocked.msg
+    await focusField(blocked.field)
+    return
+  }
+  errorMsg.value = ''
+  if (step.value < LAST_STEP) await goStep(step.value + 1)
+}
+
+async function onPrev() {
+  if (step.value <= 0) return
+  errorMsg.value = ''
+  await goStep(step.value - 1)
+}
 
 onMounted(async () => {
   document.documentElement.classList.add('m-ticket-page')
@@ -133,25 +193,31 @@ function keepDraft() {
 async function onPickFiles(event) {
   const files = Array.from(event.target?.files || [])
   event.target.value = ''            // 允许连续选同一张文件
-  for (const file of files) {
-    if (shots.value.length >= maxImages.value) {
-      errorMsg.value = `最多 ${maxImages.value} 张图片`
-      break
+  if (!files.length) return
+  filePickBusy.value = true
+  try {
+    for (const file of files) {
+      if (shots.value.length >= maxImages.value) {
+        errorMsg.value = `最多 ${maxImages.value} 张图片`
+        break
+      }
+      const item = { key: null, preview: '', uploading: true, name: file.name }
+      shots.value.push(item)
+      try {
+        const compressed = await compressImage(file)
+        item.preview = URL.createObjectURL(compressed)
+        item.key = await uploadTicketImage(formToken.value, compressed)
+        form.imageKeys.push(item.key)
+      } catch (e) {
+        errorMsg.value = e?.message || '图片上传失败'
+        const idx = shots.value.indexOf(item)
+        if (idx >= 0) shots.value.splice(idx, 1)
+      } finally {
+        item.uploading = false
+      }
     }
-    const item = { key: null, preview: '', uploading: true, name: file.name }
-    shots.value.push(item)
-    try {
-      const compressed = await compressImage(file)
-      item.preview = URL.createObjectURL(compressed)
-      item.key = await uploadTicketImage(formToken.value, compressed)
-      form.imageKeys.push(item.key)
-    } catch (e) {
-      errorMsg.value = e?.message || '图片上传失败'
-      const idx = shots.value.indexOf(item)
-      if (idx >= 0) shots.value.splice(idx, 1)
-    } finally {
-      item.uploading = false
-    }
+  } finally {
+    filePickBusy.value = false
   }
 }
 
@@ -162,6 +228,7 @@ function removeShot(index) {
   if (item.key) {
     const at = form.imageKeys.indexOf(item.key)
     if (at >= 0) form.imageKeys.splice(at, 1)
+    tryDeleteTicketImage(formToken.value, item.key)
   }
   shots.value.splice(index, 1)
 }
@@ -182,10 +249,13 @@ function rollCode() {
   keepDraft()
 }
 
-function focusField(id) {
+async function focusField(id) {
   if (!id) return
+  const page = stepIndexForField(id)
+  if (step.value !== page) await goStep(page)
   // 类型折起来时先展开再定位，否则报错文案指着一条看不见的选项
   if (id === 'f-category' && collapsibleCategory.value) categoryOpen.value = true
+  await nextTick()
   const el = document.getElementById(id)
   if (!el) return
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -196,23 +266,10 @@ function focusField(id) {
 
 async function onSubmit() {
   if (submitting.value) return
-  const blocked = submitBlockReason({
-    title: form.title,
-    content: form.content,
-    contactPhone: form.contactPhone,
-    contactName: form.contactName,
-    location: form.location,
-    queryCode: form.queryCode,
-    categoryId: form.categoryId,
-    categoryOptions: meta.value?.categories || [],
-    imageCount: form.imageKeys.length,
-    needPhone: needPhone.value,
-    uploading: shots.value.some((s) => s.uploading),
-    rules: rules.value
-  })
+  const blocked = submitBlockReason(formPayload())
   if (blocked) {
     errorMsg.value = blocked.msg
-    focusField(blocked.field)
+    await focusField(blocked.field)
     return
   }
   errorMsg.value = ''
@@ -293,9 +350,20 @@ async function again() {
     bootError.value = e?.message || '重新获取登记凭证失败，请刷新页面'
   }
   result.value = null
+  step.value = 0
+  errorMsg.value = ''
+  categoryOpen.value = false
   form.title = ''
   form.content = ''
+  form.location = ''
+  form.contactName = ''
+  form.contactPhone = ''
+  form.queryCode = ''
+  form.categoryId = null
+  form.urgency = 3
+  form.website = ''
   form.imageKeys = []
+  filePickBusy.value = false
   shots.value.forEach((s) => s.preview && URL.revokeObjectURL(s.preview))
   shots.value = []
 }
@@ -303,10 +371,18 @@ async function again() {
 
 <template>
   <div class="m-shell">
-    <header class="m-topbar">
+    <header class="m-topbar" :class="{ 'm-topbar--wizard': !booting && !bootError && !result }">
       <h1>问题登记</h1>
       <span class="m-sub">{{ meta?.bizDeptName || meta?.channelName || '' }}</span>
       <RouterLink class="m-link" to="/m/query">查进度</RouterLink>
+      <nav v-if="!booting && !bootError && !result" class="m-steps" aria-label="登记进度">
+        <span v-for="(s, i) in STEPS" :key="s.key"
+              class="m-steps-seg"
+              :class="{ on: i === step, done: i < step }"
+              :aria-current="i === step ? 'step' : undefined">
+          {{ s.label }}
+        </span>
+      </nav>
     </header>
 
     <main class="m-body">
@@ -349,9 +425,9 @@ async function again() {
       <template v-else>
         <div v-if="errorMsg" class="m-error">{{ errorMsg }}</div>
 
-        <!-- 问题描述区块 -->
-        <div class="m-card">
-          <span class="m-section-title">问题信息</span>
+        <!-- 第 1 步：发生了什么 -->
+        <div v-if="step === 0" class="m-card">
+          <span class="m-section-title">{{ STEPS[0].label }}</span>
           <div class="m-field">
             <label class="m-label" for="f-title">问题标题
               <span v-if="rules.titleRequired" class="m-req">必填</span>
@@ -403,43 +479,17 @@ async function again() {
             <div class="m-hint">照片会自动压缩，只支持 jpg/png/gif/webp，单张 5MB 以内。</div>
           </div>
 
-          <!-- 蜜罐：对读屏软件和键盘都隐藏，只有按表单规律自动填字段的脚本会填它 -->
-          <div class="m-field hp-fax" aria-hidden="true">
-            <label for="f-fax">传真号码（请勿填写）</label>
-            <input id="f-fax" class="m-input" v-model="form.website"
-                   autocomplete="off" tabindex="-1" name="hp_fax_code" readonly
-                   @focus="(e) => e.target.removeAttribute('readonly')">
-          </div>
         </div>
 
-        <!--
-          查询凭证紧跟现场照片：单号是 ST100001 这种可预测的短流水，任何人抄到号就能凑出相邻的号，
-          所以「别人读不到我这条」完全靠下面这 6 位数字。它必填、每单不同，也不做成后台可关的参数。
-        -->
-        <div class="m-card">
-          <span class="m-section-title">查询密码 <span class="m-req">必填</span></span>
-          <div class="m-field">
-            <label class="m-label" for="f-code">自己设一个 6 位数字</label>
-            <div class="m-code-row">
-              <input id="f-code" class="m-input m-code-input" v-model="form.queryCode" maxlength="6"
-                     inputmode="numeric" autocomplete="off" placeholder="6 位数字" @input="onCodeInput">
-              <button class="m-btn ghost m-code-dice" type="button" @click="rollCode">帮我生成</button>
-            </div>
-            <div class="m-hint">
-              之后凭「单号 + 这个密码」查进度；只有你自己知道密码，别人才读不到你报的内容。
-              别照抄提示里的样例，也别用 111111、123456 这类一眼猜中的号。
-            </div>
-          </div>
-        </div>
-
-        <!-- 分类与紧急程度 -->
-        <div class="m-card">
-          <span class="m-section-title">分类与优先级</span>
+        <!-- 第 2 步：去哪处理 -->
+        <div v-if="step === 1" class="m-card">
+          <span class="m-section-title">{{ STEPS[1].label }}</span>
           <div class="m-field">
             <span class="m-label">紧急程度</span>
             <div class="m-seg">
               <button v-for="u in (meta?.urgencies || [])" :key="u.code" type="button"
-                      :class="{ on: form.urgency === u.code }" @click="form.urgency = u.code">
+                      :class="{ on: form.urgency === u.code }"
+                      @click="form.urgency = u.code; keepDraft()">
                 {{ u.name }}<small>{{ formatSlaHint(u.slaMinutes) }}</small>
               </button>
             </div>
@@ -482,9 +532,9 @@ async function again() {
           </div>
         </div>
 
-        <!-- 联系方式 -->
-        <div class="m-card">
-          <span class="m-section-title">联系方式</span>
+        <!-- 第 3 步：怎么联系你 -->
+        <div v-if="step === 2" class="m-card">
+          <span class="m-section-title">{{ STEPS[2].label }}</span>
           <div class="m-field">
             <label class="m-label" for="f-name">你的姓名或工号
               <span v-if="rules.contactNameRequired" class="m-req">必填</span>
@@ -500,18 +550,98 @@ async function again() {
           </div>
         </div>
 
+        <!--
+          查询凭证放最后一页：单号是 ST100001 这种可预测的短流水，任何人抄到号就能凑出相邻的号，
+          所以「别人读不到我这条」完全靠下面这 6 位数字。它必填、每单不同，也不做成后台可关的参数。
+        -->
+        <div v-if="step === 2" class="m-card">
+          <span class="m-section-title">查询密码 <span class="m-req">必填</span></span>
+          <div class="m-field">
+            <label class="m-label" for="f-code">自己设一个 6 位数字</label>
+            <div class="m-code-row">
+              <input id="f-code" class="m-input m-code-input" v-model="form.queryCode" maxlength="6"
+                     inputmode="numeric" autocomplete="off" placeholder="6 位数字" @input="onCodeInput">
+              <button class="m-btn ghost m-code-dice" type="button" @click="rollCode">帮我生成</button>
+            </div>
+            <div class="m-hint">
+              之后凭「单号 + 这个密码」查进度；只有你自己知道密码，别人才读不到你报的内容。
+              别照抄提示里的样例，也别用 111111、123456 这类一眼猜中的号。
+            </div>
+          </div>
+        </div>
+
+        <!-- 蜜罐：对读屏软件和键盘都隐藏，只有按表单规律自动填字段的脚本会填它 -->
+        <div class="m-field hp-fax" aria-hidden="true">
+          <label for="f-fax">传真号码（请勿填写）</label>
+          <input id="f-fax" class="m-input" v-model="form.website"
+                 autocomplete="off" tabindex="-1" name="hp_fax_code" readonly
+                 @focus="(e) => e.target.removeAttribute('readonly')">
+        </div>
+
       </template>
     </main>
 
     <footer v-if="!booting && !bootError && !result" class="m-bar">
-      <button class="m-btn" type="button" :disabled="submitting" @click="onSubmit">
-        {{ submitting ? '提交中…' : '提交登记' }}
-      </button>
+      <div class="m-inline-actions">
+        <button v-if="step > 0" class="m-btn ghost" type="button" @click="onPrev">上一步</button>
+        <button v-if="step < LAST_STEP" class="m-btn" type="button" @click="onNext">下一步</button>
+        <button v-else class="m-btn" type="button" :disabled="submitting" @click="onSubmit">
+          {{ submitting ? '提交中…' : '提交登记' }}
+        </button>
+      </div>
     </footer>
   </div>
 </template>
 
 <style>
+/* 三联工单联：虚线撕口 + 三段色条，已填用完成色、当前用强调色，和卡片左边框同一套语言 */
+.m-topbar--wizard {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.m-steps {
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.m-steps-seg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.m-steps-seg::after {
+  content: "";
+  height: 3px;
+  border-radius: 1px;
+  background: var(--line);
+}
+.m-steps-seg.on {
+  color: var(--ink);
+  font-weight: 700;
+}
+.m-steps-seg.on::after {
+  background: var(--accent);
+}
+.m-steps-seg.done {
+  color: var(--ok);
+  font-weight: 600;
+}
+.m-steps-seg.done::after {
+  background: var(--ok);
+}
+
 /* 查询密码：数字居中并拉开字距，方便看清自己设的是哪 6 位；生成按钮跟在同一行 */
 .m-code-row {
   display: flex;

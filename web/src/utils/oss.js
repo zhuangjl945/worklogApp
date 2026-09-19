@@ -1,24 +1,7 @@
-import { ossPolicy } from '../api/work'
+import { ossPolicy, ossDeleteObject } from '../api/work'
+import { parseFileUrlList, removedUrls, toOssKey } from './ossUrls'
 
-/**
- * 与后端 OssKeys.toKey 对齐：完整地址 / 签名地址 / objectKey 都能还原出要删的 key。
- */
-export function toOssKey(urlOrKey) {
-  if (!urlOrKey) return ''
-  const v = String(urlOrKey).trim()
-  if (!v) return ''
-  const scheme = v.indexOf('://')
-  let path = v
-  if (scheme >= 0) {
-    const slash = v.indexOf('/', scheme + 3)
-    if (slash < 0) return ''
-    path = v.slice(slash + 1)
-  }
-  const query = path.indexOf('?')
-  if (query >= 0) path = path.slice(0, query)
-  while (path.startsWith('/')) path = path.slice(1)
-  return path
-}
+export { parseFileUrlList, removedUrls, toOssKey }
 
 export async function uploadToOss(file, dir) {
   const policyResp = await ossPolicy({
@@ -42,14 +25,13 @@ export async function uploadToOss(file, dir) {
   return p.url
 }
 
-export function parseFileUrlList(raw) {
-  if (!raw) return []
+/** 登录用户删未引用对象；失败只打日志，不挡页面上的移除 */
+export async function tryDeleteOssObject(urlOrKey) {
+  const key = toOssKey(urlOrKey)
+  if (!key) return
   try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed.filter(Boolean)
-    if (typeof parsed === 'string' && parsed) return [parsed]
-  } catch {
-    /* 兼容历史单 URL */
+    await ossDeleteObject({ key })
+  } catch (e) {
+    console.error('清理 OSS 图片失败:', e)
   }
-  return String(raw).split(',').map((s) => s.trim()).filter(Boolean)
 }

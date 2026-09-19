@@ -33,8 +33,7 @@ async function doRenew() {
   }
 }
 import { me } from '../api/auth'
-import { ossDeleteObject } from '../api/work'
-import { parseFileUrlList, uploadToOss } from '../utils/oss'
+import { parseFileUrlList, tryDeleteOssObject, uploadToOss } from '../utils/oss'
 import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 
 const route = useRoute()
@@ -221,9 +220,7 @@ async function removeExistingFile(url) {
     const newUrlStr = files.length > 0 ? JSON.stringify(files) : null
     await contractUpdateAttachments(id, { contractFileUrl: newUrlStr })
 
-    const u = new URL(url)
-    const key = u.pathname.startsWith('/') ? u.pathname.substring(1) : u.pathname
-    await ossDeleteObject({ key })
+    await tryDeleteOssObject(url)
 
     contract.value.contractFileUrl = newUrlStr
     ElMessage.success('已删除')

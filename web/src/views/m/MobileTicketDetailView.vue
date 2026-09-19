@@ -9,7 +9,8 @@ import {
   reporterReopen,
   reporterReply,
   uploadTicketImage,
-  fetchFormToken
+  fetchFormToken,
+  tryDeleteTicketImage
 } from '../../api/ticketPublic'
 import { compressImage } from '../../utils/imageCompress'
 import { forgetTicket, getAccessToken, saveTicket } from '../../utils/ticketVault'
@@ -191,6 +192,14 @@ async function onPickFiles(event) {
 
 const formTokenForReply = ref('')
 
+function removeShot(i) {
+  const item = replyShots.value[i]
+  if (!item) return
+  if (item.preview) URL.revokeObjectURL(item.preview)
+  if (item.key) tryDeleteTicketImage(formTokenForReply.value, item.key)
+  replyShots.value.splice(i, 1)
+}
+
 function onReply() {
   const text = replyText.value.trim()
   const keys = replyShots.value.filter((s) => s.key).map((s) => s.key)
@@ -310,7 +319,7 @@ function forget() {
           <div class="m-shots" style="margin-top:12px">
             <div v-for="(s, i) in replyShots" :key="i" class="m-shot">
               <img v-if="s.preview" :src="s.preview" alt="补充照片">
-              <button class="m-shot-del" type="button" aria-label="删除" @click="replyShots.splice(i, 1)">×</button>
+              <button class="m-shot-del" type="button" aria-label="删除" @click="removeShot(i)">×</button>
             </div>
             <label v-if="replyShots.length < 9" class="m-shot-add">
               <span>＋</span>加照片

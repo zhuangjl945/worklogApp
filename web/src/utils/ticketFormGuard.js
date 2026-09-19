@@ -109,13 +109,23 @@ function blockForText({ required, minLen }, label, value, field) {
   return null
 }
 
+/** 登记表三步对应的字段：翻页只拦本页，提交失败按字段跳回那一页 */
+export const STEP_FIELDS = [
+  ['f-title', 'f-content', 'shots'],
+  ['f-loc', 'f-category'],
+  ['f-name', 'f-phone', 'f-code']
+]
+
+export function stepIndexForField(field) {
+  const i = STEP_FIELDS.findIndex((fields) => fields.includes(field))
+  return i >= 0 ? i : 0
+}
+
 /**
- * @param rules       meta.formRules（缺省时用 DEFAULT_FORM_RULES）
- * @param needPhone   服务端合并过的「本入口联系电话是否必填」（渠道勾选 OR 全局参数）
- * @param imageCount  已上传成功的照片张数
- * @returns 第一个不满足规则的原因，全通过则 null
+ * 按现有提交规则逐条产出拦阻原因，顺序与整表提交一致。
+ * 分页翻页只取当前页字段；整表提交取第一条。
  */
-export function submitBlockReason({
+function* eachBlockReason({
   title,
   content,
   contactPhone,
@@ -130,7 +140,7 @@ export function submitBlockReason({
   rules
 } = {}) {
   if (uploading) {
-    return { msg: '照片还在上传，请稍候', field: 'shots' }
+    yield { msg: '照片还在上传，请稍候', field: 'shots' }
   }
   const r = resolveFormRules(rules)
 
@@ -139,43 +149,62 @@ export function submitBlockReason({
   if (!r.titleRequired && !r.contentRequired) {
     // 两样都做成选填不等于可以什么都不写：服务端这两列是 NOT NULL，至少要说清一件事
     if (!String(title || '').trim() && !String(content || '').trim()) {
-      return { msg: '请至少填写问题标题或问题描述', field: 'f-title' }
+      yield { msg: '请至少填写问题标题或问题描述', field: 'f-title' }
     }
   } else {
     const hit = blockForText({ required: r.titleRequired, minLen: r.titleMinLen }, titleLabel, title, 'f-title')
       || blockForText({ required: r.contentRequired, minLen: r.contentMinLen }, contentLabel, content, 'f-content')
-    if (hit) return hit
+    if (hit) yield hit
   }
 
   const phone = normalizePhone(contactPhone)
   if ((needPhone || r.contactPhoneRequired) && !phone) {
-    return { msg: '请填写联系电话（手机、短号或内线均可）', field: 'f-phone' }
+    yield { msg: '请填写联系电话（手机、短号或内线均可）', field: 'f-phone' }
   }
   if (phone && !isValidContactPhone(phone)) {
-    return { msg: '联系电话至少 3 位数字', field: 'f-phone' }
+    yield { msg: '联系电话至少 3 位数字', field: 'f-phone' }
   }
 
   const nameHit = blockForText({ required: r.contactNameRequired, minLen: 0 }, LABELS.contactName, contactName, 'f-name')
-  if (nameHit) return nameHit
+  if (nameHit) yield nameHit
   const locHit = blockForText({ required: r.locationRequired, minLen: 0 }, LABELS.location, location, 'f-loc')
-  if (locHit) return locHit
+  if (locHit) yield locHit
 
   if (r.categoryRequired && !categoryId && categoryOptions.length) {
-    return { msg: '请选择问题类型', field: 'f-category' }
+    yield { msg: '请选择问题类型', field: 'f-category' }
   }
 
   if (r.minImages > 0 && Number(imageCount) < r.minImages) {
-    return { msg: `请至少上传 ${r.minImages} 张现场照片`, field: 'shots' }
+    yield { msg: `请至少上传 ${r.minImages} 张现场照片`, field: 'shots' }
   }
 
   // 查询密码放在最后一道拦：前面的字段没填时先提示前面的，
   // 别让用户刚填完标题就被一个还没看见的输入框挡住
   const code = normalizeQueryCode(queryCode)
   if (code.length !== QUERY_CODE_LENGTH) {
-    return { msg: `请设置 ${QUERY_CODE_LENGTH} 位数字查询密码`, field: 'f-code' }
+    yield { msg: `请设置 ${QUERY_CODE_LENGTH} 位数字查询密码`, field: 'f-code' }
   }
   if (isWeakQueryCode(code)) {
-    return { msg: '查询密码太好猜（全相同、连号都不行），请换一个', field: 'f-code' }
+    yield { msg: '查询密码太好猜（全相同、连号都不行），请换一个', field: 'f-code' }
+  }
+}
+
+/**
+ * @param rules       meta.formRules（缺省时用 DEFAULT_FORM_RULES）
+ * @param needPhone   服务端合并过的「本入口联系电话是否必填」（渠道勾选 OR 全局参数）
+ * @param imageCount  已上传成功的照片张数
+ * @returns 第一个不满足规则的原因，全通过则 null
+ */
+export function submitBlockReason(payload) {
+  for (const hit of eachBlockReason(payload)) return hit
+  return null
+}
+
+/** 只拦当前页字段；后面页还没见到的电话、密码不在这里报 */
+export function stepBlockReason(step, payload) {
+  const allowed = new Set(STEP_FIELDS[step] || [])
+  for (const hit of eachBlockReason(payload)) {
+    if (allowed.has(hit.field)) return hit
   }
   return null
 }

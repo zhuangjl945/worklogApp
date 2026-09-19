@@ -7,6 +7,8 @@ import {
   normalizeQueryCode,
   randomQueryCode,
   resolveFormRules,
+  stepBlockReason,
+  stepIndexForField,
   submitBlockReason
 } from './ticketFormGuard.js'
 
@@ -209,5 +211,88 @@ describe('查询密码（报修人自设 6 位数字）', () => {
   it('查询密码这道坎排在最后：前面的字段没填时先提示前面的', () => {
     // 标题不合规 + 没设密码：应先报标题，而不是把用户跳到一个还没看见的框
     assert.equal(submitBlockReason({ ...ok, title: '卡纸', queryCode: '' })?.field, 'f-title')
+  })
+})
+
+describe('分页填写：只拦当前页', () => {
+  const empty = {
+    title: '',
+    content: '',
+    contactPhone: '',
+    queryCode: '',
+    needPhone: true,
+    uploading: false
+  }
+  const problemOk = {
+    ...empty,
+    title: '打印机卡纸了',
+    content: '三楼打印机不出纸'
+  }
+
+  it('第一步标题没填时只提标题，不提后面的电话', () => {
+    const r = stepBlockReason(0, empty)
+    assert.equal(r?.field, 'f-title')
+    assert.match(r.msg, /问题标题/)
+  })
+
+  it('第一步标题描述齐了就可以翻页，即使电话和密码都空', () => {
+    assert.equal(stepBlockReason(0, problemOk), null)
+  })
+
+  it('第一步照片张数不够时拦住，不提后面的电话', () => {
+    const r = stepBlockReason(0, {
+      ...problemOk,
+      imageCount: 0,
+      rules: { ...DEFAULT_FORM_RULES, minImages: 2 }
+    })
+    assert.equal(r?.field, 'shots')
+    assert.match(r.msg, /至少上传 2 张/)
+  })
+
+  it('照片还在上传时第一步拦住', () => {
+    assert.equal(stepBlockReason(0, { ...problemOk, uploading: true })?.field, 'shots')
+  })
+
+  it('第二步地点必填时只拦地点，不提查询密码', () => {
+    const r = stepBlockReason(1, {
+      ...problemOk,
+      rules: { ...DEFAULT_FORM_RULES, locationRequired: true }
+    })
+    assert.equal(r?.field, 'f-loc')
+  })
+
+  it('第二步地点和类型都选填时可以直接翻页', () => {
+    assert.equal(stepBlockReason(1, problemOk), null)
+  })
+
+  it('第二步类型必填时只拦类型', () => {
+    const r = stepBlockReason(1, {
+      ...problemOk,
+      categoryOptions: [{ id: 7 }],
+      rules: { ...DEFAULT_FORM_RULES, categoryRequired: true }
+    })
+    assert.equal(r?.field, 'f-category')
+  })
+
+  it('第三步才拦电话和查询密码', () => {
+    const r = stepBlockReason(2, problemOk)
+    assert.equal(r?.field, 'f-phone')
+    assert.equal(stepBlockReason(2, { ...problemOk, contactPhone: '13800138000' })?.field, 'f-code')
+    assert.match(
+      stepBlockReason(2, { ...problemOk, contactPhone: '13800138000', queryCode: '123456' }).msg,
+      /太好猜/
+    )
+  })
+
+  it('提交失败时能按字段跳回对应页', () => {
+    assert.equal(stepIndexForField('f-title'), 0)
+    assert.equal(stepIndexForField('f-content'), 0)
+    assert.equal(stepIndexForField('shots'), 0)
+    assert.equal(stepIndexForField('f-loc'), 1)
+    assert.equal(stepIndexForField('f-category'), 1)
+    assert.equal(stepIndexForField('f-name'), 2)
+    assert.equal(stepIndexForField('f-phone'), 2)
+    assert.equal(stepIndexForField('f-code'), 2)
+    assert.equal(stepIndexForField('unknown'), 0)
   })
 })

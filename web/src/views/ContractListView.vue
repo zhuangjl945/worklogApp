@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Tickets } from '@element-plus/icons-vue'
 import { contractDelete, contractPage, contractStart, contractComplete, contractTerminate, contractRenew } from '../api/contract'
 import { me } from '../api/auth'
-import { parseFileUrlList } from '../utils/oss'
+import { parseFileUrlList, tryDeleteOssObject } from '../utils/oss'
 import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 import QueryConsole from '../components/QueryConsole.vue'
 import { useQueryConsole } from '../composables/useQueryConsole'
@@ -149,7 +149,9 @@ function onSizeChange(size) {
 async function doDelete(row) {
   try {
     await ElMessageBox.confirm('仅草稿合同可删除，确认删除吗？', '提示', { type: 'warning' })
+    const files = parseFileUrlList(row.contractFileUrl)
     await contractDelete(row.id)
+    for (const url of files) tryDeleteOssObject(url)
     ElMessage.success('删除成功')
     await load()
   } catch (e) {

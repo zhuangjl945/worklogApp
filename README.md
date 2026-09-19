@@ -85,7 +85,7 @@ Spring Boot 3 + Vue 3 的企业内部工作记录平台：日常工作记录、�
 ### 1. 克隆
 
 ```bash
-git clone https://github.com/zhuangj1945/worklogApp.git
+git clone https://github.com/zhuangjl945/worklogApp.git
 cd worklogApp
 ```
 
@@ -390,8 +390,4 @@ git commit -m "feat: 工单超时自动确认"
 
 ## 许可证与反馈
 
-[MIT License](LICENSE)。问题与建议请提 [Issue](https://github.com/zhuangj1945/worklogApp/issues)。
-
-## 现状摘要（相对早期版本）
-
-当前代码已包含：三级角色与可配置权限、系统参数页、服务工单（手机 H5 + 受理台 + 渠道二维码）、口令 BCrypt 与 JWT 启动校验、CORS 白名单、工单限流与自动确认。版本号仍为 `0.0.1-SNAPSHOT`。
+[MIT License](LICENSE)。问题与建议请提 [Issue](https://github.com/zhuangjl945/worklogApp/issues)。

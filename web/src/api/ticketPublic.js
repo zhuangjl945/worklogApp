@@ -87,6 +87,20 @@ export async function loadTicketImage(ticketNo, accessToken, key) {
   return URL.createObjectURL(resp.data ?? resp)
 }
 
+/** 撤掉刚上传、还没提交的图；凭证必须仍有效，且 key 属于本渠道 */
+export async function deleteTicketImage(formToken, key) {
+  return await publicHttp.post('/delete-object', { formToken, key })
+}
+
+export async function tryDeleteTicketImage(formToken, key) {
+  if (!formToken || !key) return
+  try {
+    await deleteTicketImage(formToken, key)
+  } catch (e) {
+    console.error('清理 OSS 图片失败:', e)
+  }
+}
+
 /** 直传到 OSS，结构与 utils/oss.js 一致 */
 export async function uploadTicketImage(formToken, file) {
   const resp = await fetchUploadPolicy(formToken, file?.name)

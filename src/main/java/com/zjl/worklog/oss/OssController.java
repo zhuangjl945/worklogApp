@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -64,14 +63,11 @@ public class OssController {
     @Value("${aliyun.oss.dir-prefix:}")
     private String dirPrefix;
 
-    /**
-     * 只用于「这个 key 是否还在被业务记录引用」的一次性只读检查（见 countObjectReferences），
-     * 不值得为它在四个模块里各加一个 mapper 方法。
-     */
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    /** 删除走 {@link OssDeleteService}，这里只做登录门槛。 */
     @Autowired
     private SysConfigService sysConfig;
+    @Autowired
+    private OssDeleteService ossDeleteService;
 
 
     @GetMapping("/policy")
@@ -232,57 +228,8 @@ public class OssController {
     @DeleteMapping("/object")
     public ApiResponse<Boolean> deleteObject(@RequestParam String key) {
         CurrentUser cu = requireLogin();
-        ensureOssConfigured();
-
-        if (!StringUtils.hasText(key)) {
-            throw new BizException(400, "key 不能为空");
-        }
-
-        String k = key.trim();
-        if (k.startsWith("/")) k = k.substring(1);
-
-        assertKeyAllowed(k);
-
-        long refs = countObjectReferences(k);
-        if (refs > 0) {
-            log.warn("拒绝删除仍被引用的 OSS 对象: operator={} userId={} key={} refs={}", cu.getUsername(), cu.getId(), k, refs);
-            throw new BizException(40005, "该文件仍被业务记录引用，不能直接删除；请先在对应记录里移除附件");
-        }
-
-        OSS ossClient = new OSSClientBuilder().build(ossClientEndpoint(), accessKeyId, accessKeySecret);
-        try {
-            ossClient.deleteObject(bucket, k);
-            log.info("OSS 对象已删除: operator={} userId={} key={}", cu.getUsername(), cu.getId(), k);
-            return ApiResponse.ok(true);
-        } catch (Exception e) {
-            log.error("删除 OSS 对象失败: operator={} key={}", cu.getUsername(), k, e);
-            throw new BizException(500, "删除 OSS 对象失败");
-        } finally {
-            shutdownQuietly(ossClient);
-        }
-    }
-
-    /**
-     * 这个 key 是否仍被业务记录引用。
-     *
-     * <p>四张表都是「JSON 数组文本」与「单个 URL」混存的历史格式，只能按子串匹配；
-     * 宁可把误判方向留在「认为它还在用」而拒绝删除，也绝不反过来放行。
-     * 为一次低频删除检查在四个模块各加一个 mapper 方法不划算，这里直接用一条只读 SQL。
-     */
-    private long countObjectReferences(String key) {
-        String like = "%" + escapeLike(key) + "%";
-        Long total = jdbcTemplate.queryForObject(
-                "SELECT (SELECT COUNT(1) FROM work_record WHERE deleted = 0 AND image_urls LIKE ?) "
-                        + "+ (SELECT COUNT(1) FROM contract_main WHERE deleted = 0 AND contract_file_url LIKE ?) "
-                        + "+ (SELECT COUNT(1) FROM service_ticket WHERE deleted = 0 AND image_urls LIKE ?) "
-                        + "+ (SELECT COUNT(1) FROM service_ticket_log WHERE image_urls LIKE ?)",
-                Long.class, like, like, like, like);
-        return total == null ? 0L : total;
-    }
-
-    /** 转义 LIKE 通配符：key 里出现 % 或 _ 时不该把匹配范围放大 */
-    private static String escapeLike(String raw) {
-        return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        ossDeleteService.deleteUnreferenced(key, cu.getUsername() + "/" + cu.getId());
+        return ApiResponse.ok(true);
     }
 
     private void ensureOssConfigured() {

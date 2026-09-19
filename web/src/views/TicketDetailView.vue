@@ -13,7 +13,7 @@ import {
   ticketToRecord
 } from '../api/ticket'
 import { userRoster } from '../api/user'
-import { uploadToOss } from '../utils/oss'
+import { tryDeleteOssObject, uploadToOss } from '../utils/oss'
 import { fetchTicketImage } from '../utils/ticketThumb'
 
 const route = useRoute()
@@ -211,6 +211,7 @@ async function onPickShots(event) {
 function removeShot(i) {
   const item = replyShots.value[i]
   if (item?.preview) URL.revokeObjectURL(item.preview)
+  if (item?.key) tryDeleteOssObject(item.key)
   replyShots.value.splice(i, 1)
 }
 

@@ -8,8 +8,7 @@ import { me } from '../api/auth'
 import { supplierPage, supplierCreate, supplierNextCode } from '../api/supplier'
 import { deptTree, deptMyRootChildren } from '../api/dept'
 import { userRoster } from '../api/user'
-import { ossDeleteObject } from '../api/work'
-import { parseFileUrlList, uploadToOss } from '../utils/oss'
+import { parseFileUrlList, removedUrls, tryDeleteOssObject, uploadToOss } from '../utils/oss'
 import FilePreviewDialog from '../components/FilePreviewDialog.vue'
 
 const route = useRoute()
@@ -167,6 +166,7 @@ async function loadDetail() {
     if (typeof data.paymentSchedule === 'string') {
       form.paymentSchedule = JSON.parse(data.paymentSchedule || '[]')
     }
+    originalFileUrls.value = parseFileUrlList(form.contractFileUrl)
   } catch (e) {
     ElMessage.error(e?.message || '加载详情失败')
   } finally {
@@ -237,6 +237,7 @@ function onSupplierChange(val) {
 
 const uploadLoading = ref(false)
 const pendingFiles = ref([])
+const originalFileUrls = ref([])
 
 const existingFiles = computed(() => parseFileUrlList(form.contractFileUrl))
 
@@ -261,18 +262,9 @@ function removePendingFile(index) {
   pendingFiles.value.splice(index, 1)
 }
 
-async function removeExistingFile(url) {
-  try {
-    const u = new URL(url)
-    const key = u.pathname.startsWith('/') ? u.pathname.substring(1) : u.pathname
-    await ossDeleteObject({ key })
-
-    const files = existingFiles.value.filter(x => x !== url)
-    form.contractFileUrl = files.length > 0 ? JSON.stringify(files) : ''
-    ElMessage.success('已删除')
-  } catch (e) {
-    ElMessage.error(e?.message || '删除失败')
-  }
+function removeExistingFile(url) {
+  const files = existingFiles.value.filter((x) => x !== url)
+  form.contractFileUrl = files.length > 0 ? JSON.stringify(files) : ''
 }
 
 async function uploadPendingFilesToOss() {
@@ -320,6 +312,11 @@ async function submit() {
         ElMessage.success('创建成功')
         router.replace(`/contract/detail/${resp.data.id}`)
       }
+      const kept = parseFileUrlList(form.contractFileUrl)
+      for (const url of removedUrls(originalFileUrls.value, kept)) {
+        tryDeleteOssObject(url)
+      }
+      originalFileUrls.value = kept
     } catch (e) {
       ElMessage.error(e?.message || '提交失败')
     }
