@@ -1,7 +1,7 @@
-﻿<script setup>
+<script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
-import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon } from '@element-plus/icons-vue'
+import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon, Lock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { can, clearProfile, ensurePermissions, ensureProfile, roleLabel } from '../utils/auth'
 import { workRecordTransferAccept, workRecordTransferPending, workRecordTransferReject } from '../api/work'
@@ -49,6 +49,14 @@ const menuItems = [
   { path: '/work-records', label: '工作记录', icon: EditPen },
   { path: '/tickets', label: '问题受理', icon: Tickets },
   {
+    label: '数据库文档',
+    icon: DocumentCopy,
+    children: [
+      { path: '/db-doc/parse', label: 'SQL 分析', icon: EditPen },
+      { path: '/db-doc/list', label: '文档管理', icon: Document }
+    ]
+  },
+  {
     label: '合同管理',
     icon: DocumentCopy,
     children: [
@@ -56,6 +64,7 @@ const menuItems = [
       { path: '/supplier/list', label: '供应商管理', icon: OfficeBuilding }
     ]
   },
+  { path: '/credential', label: '凭据保管库', icon: Lock },
   {
     label: '报表统计',
     icon: TrendCharts,
@@ -1005,3 +1014,5 @@ onUnmounted(() => {
   }
 }
 </style>
+
+

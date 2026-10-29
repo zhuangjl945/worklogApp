@@ -29,6 +29,12 @@ const TicketInboxView = () => import('../views/TicketInboxView.vue')
 const TaskBoardView = () => import('../views/TaskBoardView.vue')
 const TicketDetailView = () => import('../views/TicketDetailView.vue')
 const TicketChannelView = () => import('../views/TicketChannelView.vue')
+// 凭据保管库：敏感数据单独拆页，首屏不必多背一个加解密组件
+const CredentialListView = () => import('../views/CredentialListView.vue')
+// 数据库文档：按需加载，ER 图依赖 ECharts
+const DbDocParseView = () => import('../views/DbDocParseView.vue')
+const DbDocListView = () => import('../views/DbDocListView.vue')
+const DbDocDetailView = () => import('../views/DbDocDetailView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -52,12 +58,20 @@ const router = createRouter({
         { path: 'supplier/edit', name: 'supplier-create', component: SupplierEditView },
         { path: 'supplier/edit/:id', name: 'supplier-edit', component: SupplierEditView },
 
+        // --- db-doc ---
+        { path: 'db-doc/parse', name: 'db-doc-parse', component: DbDocParseView },
+        { path: 'db-doc/list', name: 'db-doc-list', component: DbDocListView },
+        { path: 'db-doc/detail/:id', name: 'db-doc-detail', component: DbDocDetailView, meta: { label: '文档详情' } },
+
         // --- contract ---
         { path: 'contract/list', name: 'contract-list', component: ContractListView },
         { path: 'contract/edit', name: 'contract-create', component: ContractEditView },
         { path: 'contract/edit/:id', name: 'contract-edit', component: ContractEditView },
         { path: 'contract/detail/:id', name: 'contract-detail', component: ContractDetailView },
         { path: 'contract/payment/:contractId', name: 'contract-payment', component: ContractPaymentView },
+
+        // --- credential vault ---
+        { path: 'credential', name: 'credential', component: CredentialListView },
 
         // --- 系统管理：直接敲 URL 也要拦，菜单隐藏只是不给人误点 ---
         // roles = 代码内置下限（配置读不到时兜底）；permission = 可在「权限设置」里调高的权限点
@@ -112,3 +126,4 @@ router.beforeEach(async (to) => {
 })
 
 export default router
+
