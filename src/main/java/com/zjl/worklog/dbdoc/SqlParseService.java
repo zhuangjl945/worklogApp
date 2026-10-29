@@ -212,10 +212,26 @@ public class SqlParseService {
     /**
      * 构建索引信息
      */
+    /**
+     * 构建索引信息，对所有字段做防御性 null 检查。
+     * JSqlParser 对 FOREIGN KEY / CHECK 等约束可能返回 null Index 或 type 为 null 的 Index。
+     */
     private IndexInfo buildIndexInfo(Index idx) {
-        if (idx == null) return IndexInfo.builder().name("UNKNOWN").type("INDEX").columns(new ArrayList<>()).build();
-        String type = idx.getType() != null ? idx.getType().toUpperCase() : "INDEX";
-        // 统一 PRIMARY KEY 的类型标签
+        // 完全为 null 的索引（FOREIGN KEY 等约束被解析为 null）直接跳过
+        if (idx == null) {
+            return IndexInfo.builder().name("UNKNOWN").type("INDEX").columns(new ArrayList<>()).build();
+        }
+
+        // type 防御：JSqlParser 对某些约束（如 CHECK）的 type 可能为 null
+        String rawType = idx.getType();
+        String type;
+        if (rawType == null || rawType.isBlank()) {
+            type = "INDEX";
+        } else {
+            type = rawType.toUpperCase();
+        }
+
+        // 统一类型标签
         if (type.contains("PRIMARY")) {
             type = "PRIMARY";
         } else if (type.contains("UNIQUE")) {
@@ -223,10 +239,14 @@ public class SqlParseService {
         } else if (type.contains("INDEX") || type.contains("KEY")) {
             type = "INDEX";
         }
+
+        // 提取列名，防御 null ColumnParams 和 null 列名
         List<String> cols = new ArrayList<>();
         if (idx.getColumns() != null) {
             for (Index.ColumnParams cp : idx.getColumns()) {
-                cols.add(cleanName(cp.getColumnName()));
+                if (cp != null && cp.getColumnName() != null) {
+                    cols.add(cleanName(cp.getColumnName()));
+                }
             }
         }
 
@@ -311,6 +331,7 @@ public class SqlParseService {
         return val;
     }
 }
+
 
 
 
