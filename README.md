@@ -1,4 +1,4 @@
-﻿# 医信运维系统
+# 医信运维系统
 
 Spring Boot 3 + Vue 3 的医院信息运维管理平台：日常工作记录、任务看板、供应商与合同、以及手机扫码报修（服务工单）。
 
@@ -24,6 +24,8 @@ Spring Boot 3 + Vue 3 的医院信息运维管理平台：日常工作记录、�
 - **系统管理**：科室树、员工、人员角色、参数配置、权限设置、登记渠道（二维码）
 - **文件**：阿里云 OSS 直传；手机拍照走访客 policy
 - **认证**：JWT；口令 BCrypt（存量明文启动时迁移）
+- **数据库文档**：SQL DDL 解析引擎，自动提取表结构、字段、索引，生成 ER 关系图
+- **凭据保管库**：AES-256-GCM 加密存储密码/密钥，支持分类、标签、过期提醒
 
 ## 项目截图
 
@@ -119,6 +121,12 @@ mysql -u root -p work_log_system < src/main/resources/db/permission_module.sql
 
 # 登记渠道、服务工单、工单流转日志
 mysql -u root -p work_log_system < src/main/resources/db/service_ticket_module.sql
+
+# 数据库文档分析
+mysql -u root -p work_log_system < src/main/resources/db/db_doc_module.sql
+
+# 凭据保管库
+mysql -u root -p work_log_system < src/main/resources/db/credential_module.sql
 ```
 
 脚本均无外键，表之间是逻辑关联。
@@ -291,7 +299,9 @@ worklog/
 │   ├── supplier/                      # 供应商
 │   ├── ticket/                        # 服务工单、公开登记、渠道、限流、定时确认
 │   ├── user/                          # 员工与角色
-│   └── work/                          # 工作记录、分类、看板统计
+│   ├── work/                          # 工作记录、分类、看板统计
+│   ├── dbdoc/                         # 数据库文档分析、SQL DDL 解析
+│   └── credential/                    # 凭据保管库、AES-256-GCM 加密
 ├── src/main/resources/
 │   ├── application.yml.example        # 配置模板
 │   ├── db/                            # 分模块 SQL
