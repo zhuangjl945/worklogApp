@@ -85,6 +85,7 @@ public class SqlParseService {
         // 解析表级别的 PRIMARY KEY 索引
         if (ct.getIndexes() != null) {
             for (Index idx : ct.getIndexes()) {
+                if (idx == null) continue;
                 if (idx.getType() != null && idx.getType().toUpperCase().contains("PRIMARY")) {
                     for (Index.ColumnParams cp : idx.getColumns()) {
                         primaryKeys.add(cleanName(cp.getColumnName()));
@@ -103,6 +104,7 @@ public class SqlParseService {
         // 解析索引
         if (ct.getIndexes() != null) {
             for (Index idx : ct.getIndexes()) {
+                if (idx == null) continue;
                 indexes.add(buildIndexInfo(idx));
             }
         }
@@ -211,6 +213,7 @@ public class SqlParseService {
      * 构建索引信息
      */
     private IndexInfo buildIndexInfo(Index idx) {
+        if (idx == null) return IndexInfo.builder().name("UNKNOWN").type("INDEX").columns(new ArrayList<>()).build();
         String type = idx.getType() != null ? idx.getType().toUpperCase() : "INDEX";
         // 统一 PRIMARY KEY 的类型标签
         if (type.contains("PRIMARY")) {
@@ -308,6 +311,7 @@ public class SqlParseService {
         return val;
     }
 }
+
 
 
 
