@@ -67,3 +67,7 @@ ticket:
     ip-window-seconds: 600 # 窗口长度
     channel-qpm: 60        # 单渠道每分钟提交上限
     phone-hour: 5          # 同一手机号每小时上限
+
+# 凭据保管库 AES-256 密钥（Base64 编码的 32 字节）
+credential:
+  aes-key: ${CREDENTIAL_AES_KEY}
