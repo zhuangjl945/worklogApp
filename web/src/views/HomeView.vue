@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
 import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon } from '@element-plus/icons-vue'
@@ -316,7 +316,7 @@ onUnmounted(() => {
     <header class="topbar">
       <div class="topLeft">
         <div class="brandMark">W</div>
-        <div class="brandName">Worklog</div>
+        <div class="brandName">医信运维系统</div>
       </div>
 
       <div class="topRight">

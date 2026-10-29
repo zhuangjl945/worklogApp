@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -14,8 +14,8 @@
     <groupId>com.zjl</groupId>
     <artifactId>worklog</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>worklog</name>
-    <description>work log system backend</description>
+    <name>医信运维系统</name>
+    <description>医院信息运维管理平台：工作日志、数据库文档、凭据保管库</description>
 
     <properties>
         <java.version>17</java.version>

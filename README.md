@@ -1,6 +1,6 @@
-# 工作日志管理系统
+﻿# 医信运维系统
 
-Spring Boot 3 + Vue 3 的企业内部工作记录平台：日常工作记录、任务看板、供应商与合同、以及手机扫码报修（服务工单）。
+Spring Boot 3 + Vue 3 的医院信息运维管理平台：日常工作记录、任务看板、供应商与合同、以及手机扫码报修（服务工单）。
 
 [![Java](https://img.shields.io/badge/Java-17-orange)](https://www.oracle.com/java/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.10-brightgreen)](https://spring.io/projects/spring-boot)

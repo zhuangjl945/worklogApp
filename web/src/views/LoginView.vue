@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '../api/auth'
@@ -50,8 +50,8 @@ async function onSubmit() {
       <div class="brand">
         <div class="brandInner">
           <div class="logoMark">W</div>
-          <h1 class="brandTitle">Worklog</h1>
-          <p class="brandDesc">工作日志管理系统</p>
+          <h1 class="brandTitle">医信运维系统</h1>
+          <p class="brandDesc">医院信息运维管理平台</p>
           <div class="brandFeatures">
             <div class="feature">
               <span class="featureDot"></span>
