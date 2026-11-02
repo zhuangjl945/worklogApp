@@ -17,6 +17,11 @@
   --g-accent: #171717;
   --g-accent-hover: #404040;
 
+  /* 可点文字色：行内链接型操作（表格「编辑」、导入框旁的「新建」）用这个，
+     和实心主色按钮区分开；此前只有 --g-accent，各处靠 var(--g-primary, #2563eb) 兜底 */
+  --g-primary: #2563eb;
+  --g-primary-hover: #1d4ed8;
+
   --g-success: #16a34a;
   --g-success-bg: #f0fdf4;
   --g-warning: #d97706;
@@ -89,6 +94,23 @@ html.m-ticket-page #app {
   background: var(--g-accent-hover) !important;
   border-color: var(--g-accent-hover) !important;
 }
+/* link / text 按钮必须单独放行：上面那条实心主色带 !important，会连 EP 自带的
+   .is-link 透明底一起压掉，结果全站 25 处 link type="primary" 全变成黑底白字胶囊。 */
+.el-button--primary.is-link:not(.is-disabled),
+.el-button--primary.is-text:not(.is-disabled) {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--g-primary) !important;
+  font-weight: 500;
+}
+.el-button--primary.is-link:hover,
+.el-button--primary.is-link:focus,
+.el-button--primary.is-text:hover,
+.el-button--primary.is-text:focus {
+  background: transparent !important;
+  color: var(--g-primary-hover) !important;
+}
+
 .el-button--default { border-radius: var(--g-radius) !important; font-weight: 500; }
 .el-button--success { border-radius: var(--g-radius) !important; }
 .el-button--danger { border-radius: var(--g-radius) !important; }

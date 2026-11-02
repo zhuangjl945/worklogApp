@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zjl.worklog.dbdoc.mapper.DbDatabaseMapper">
+
+    <resultMap id="DbDatabaseMap" type="com.zjl.worklog.dbdoc.entity.DbDatabaseEntity">
+        <id column="id" property="id"/>
+        <result column="system_id" property="systemId"/>
+        <result column="db_user" property="dbUser"/>
+        <result column="db_name" property="dbName"/>
+        <result column="db_type" property="dbType"/>
+        <result column="host" property="host"/>
+        <result column="port" property="port"/>
+        <result column="env" property="env"/>
+        <result column="jdbc_url" property="jdbcUrl"/>
+        <result column="credential_id" property="credentialId"/>
+        <result column="table_count" property="tableCount"/>
+        <result column="remark" property="remark"/>
+        <result column="status" property="status"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="system_name" property="systemName"/>
+    </resultMap>
+
+    <sql id="baseColumns">
+        d.id, d.system_id, d.db_user, d.db_name, d.db_type, d.host, d.port, d.env,
+        d.jdbc_url, d.credential_id, d.remark, d.status, d.created_by, d.create_time, d.update_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO db_database (system_id, db_user, db_name, db_type, host, port, env,
+                                 jdbc_url, credential_id, table_count, remark, status, created_by)
+        VALUES (#{systemId}, #{dbUser}, #{dbName}, #{dbType}, #{host}, #{port}, #{env},
+                #{jdbcUrl}, #{credentialId}, 0, #{remark}, #{status}, #{createdBy})
+    </insert>
+
+    <update id="updateById">
+        UPDATE db_database
+        SET system_id     = #{systemId},
+            db_user       = #{dbUser},
+            db_name       = #{dbName},
+            db_type       = #{dbType},
+            host          = #{host},
+            port          = #{port},
+            env           = #{env},
+            jdbc_url      = #{jdbcUrl},
+            credential_id = #{credentialId},
+            remark        = #{remark},
+            status        = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM db_database WHERE id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="DbDatabaseMap">
+        SELECT <include refid="baseColumns"/>,
+               s.system_name AS system_name,
+               (SELECT COUNT(1) FROM db_table_doc t WHERE t.database_id = d.id AND t.status = 1) AS table_count
+        FROM db_database d
+        LEFT JOIN db_system s ON s.id = d.system_id
+        WHERE d.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectList" resultMap="DbDatabaseMap">
+        SELECT <include refid="baseColumns"/>,
+               s.system_name AS system_name,
+               (SELECT COUNT(1) FROM db_table_doc t WHERE t.database_id = d.id AND t.status = 1) AS table_count
+        FROM db_database d
+        LEFT JOIN db_system s ON s.id = d.system_id
+        <where>
+            <if test="systemId != null">AND d.system_id = #{systemId}</if>
+            <if test="status != null">AND d.status = #{status}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (d.db_user LIKE CONCAT('%', #{keyword}, '%')
+                     OR d.db_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR d.host LIKE CONCAT('%', #{keyword}, '%')
+                     OR s.system_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY d.system_id ASC, d.env ASC, d.db_user ASC
+    </select>
+
+    <select id="selectBySystemId" resultMap="DbDatabaseMap">
+        SELECT <include refid="baseColumns"/>,
+               s.system_name AS system_name,
+               (SELECT COUNT(1) FROM db_table_doc t WHERE t.database_id = d.id AND t.status = 1) AS table_count
+        FROM db_database d
+        LEFT JOIN db_system s ON s.id = d.system_id
+        WHERE d.system_id = #{systemId} AND d.status = 1
+        ORDER BY d.env ASC, d.db_user ASC
+    </select>
+
+    <select id="countByUk" resultType="int">
+        SELECT COUNT(1) FROM db_database
+        WHERE system_id = #{systemId} AND db_user = #{dbUser} AND env = #{env}
+        <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+
+    <select id="countTables" resultType="int">
+        SELECT COUNT(1) FROM db_table_doc WHERE database_id = #{databaseId}
+    </select>
+
+    <update id="refreshTableCount">
+        UPDATE db_database d
+        SET d.table_count = (SELECT COUNT(1) FROM db_table_doc t WHERE t.database_id = #{id} AND t.status = 1)
+        WHERE d.id = #{id}
+    </update>
+
+    <select id="selectByUk" resultMap="DbDatabaseMap">
+        SELECT <include refid="baseColumns"/>,
+               s.system_name AS system_name,
+               (SELECT COUNT(1) FROM db_table_doc t WHERE t.database_id = d.id AND t.status = 1) AS table_count
+        FROM db_database d
+        LEFT JOIN db_system s ON s.id = d.system_id
+        WHERE d.system_id = #{systemId} AND d.db_user = #{dbUser} AND d.env = #{env}
+        LIMIT 1
+    </select>
+</mapper>

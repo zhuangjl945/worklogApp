@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
-import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon, Lock } from '@element-plus/icons-vue'
+import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon, Lock, Files, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { can, clearProfile, ensurePermissions, ensureProfile, roleLabel } from '../utils/auth'
 import { workRecordTransferAccept, workRecordTransferPending, workRecordTransferReject } from '../api/work'
@@ -52,8 +52,10 @@ const menuItems = [
     label: '数据库文档',
     icon: DocumentCopy,
     children: [
+      { path: '/db-doc/catalog', label: '表结构目录', icon: Files },
       { path: '/db-doc/parse', label: 'SQL 分析', icon: EditPen },
-      { path: '/db-doc/list', label: '文档管理', icon: Document }
+      { path: '/db-doc/systems', label: '系统与库用户', icon: Connection },
+      { path: '/db-doc/list', label: '分析记录', icon: Document }
     ]
   },
   {

@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zjl.worklog.dbdoc.mapper.DbTableDocMapper">
+
+    <resultMap id="DbTableDocMap" type="com.zjl.worklog.dbdoc.entity.DbTableDocEntity">
+        <id column="id" property="id"/>
+        <result column="system_id" property="systemId"/>
+        <result column="database_id" property="databaseId"/>
+        <result column="table_name" property="tableName"/>
+        <result column="table_comment" property="tableComment"/>
+        <result column="db_user" property="dbUser"/>
+        <result column="db_type" property="dbType"/>
+        <result column="column_count" property="columnCount"/>
+        <result column="index_count" property="indexCount"/>
+        <result column="pk_columns" property="pkColumns"/>
+        <result column="columns_json" property="columnsJson"/>
+        <result column="indexes_json" property="indexesJson"/>
+        <result column="source_ddl" property="sourceDdl"/>
+        <result column="first_batch_id" property="firstBatchId"/>
+        <result column="last_batch_id" property="lastBatchId"/>
+        <result column="parse_count" property="parseCount"/>
+        <result column="remark" property="remark"/>
+        <result column="status" property="status"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="updated_by" property="updatedBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="system_name" property="systemName"/>
+        <result column="database_label" property="databaseLabel"/>
+    </resultMap>
+
+    <!-- 列表用的轻量列：绝不带 columns_json / indexes_json / source_ddl -->
+    <sql id="liteColumns">
+        t.id, t.system_id, t.database_id, t.table_name, t.table_comment, t.db_user, t.db_type,
+        t.column_count, t.index_count, t.pk_columns, t.first_batch_id, t.last_batch_id,
+        t.parse_count, t.remark, t.status, t.created_by, t.updated_by, t.create_time, t.update_time,
+        s.system_name AS system_name,
+        CONCAT(d.db_user, IF(d.db_name IS NULL OR d.db_name = '', '', CONCAT(' @ ', d.db_name))) AS database_label
+    </sql>
+
+    <sql id="queryWhere">
+        <where>
+            <if test="systemId != null">AND t.system_id = #{systemId}</if>
+            <if test="databaseId != null">AND t.database_id = #{databaseId}</if>
+            <if test="status != null">AND t.status = #{status}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (t.table_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR t.table_comment LIKE CONCAT('%', #{keyword}, '%')
+                     OR t.db_user LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <!--
+              字段名检索走 columns_json 的 LIKE 匹配。
+              数据量级是「几千张表」而不是「几千万行」，且这张表只在运维查文档时读，
+              先不引入虚拟列/全文索引；真到需要时改成 GENERATED 列 + FULLTEXT 即可。
+            -->
+            <if test="columnKeyword != null and columnKeyword != ''">
+                AND t.columns_json LIKE CONCAT('%', #{columnKeyword}, '%')
+            </if>
+        </where>
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO db_table_doc (system_id, database_id, table_name, table_comment, db_user, db_type,
+                                 column_count, index_count, pk_columns, columns_json, indexes_json,
+                                 source_ddl, first_batch_id, last_batch_id, parse_count, remark, status,
+                                 created_by, updated_by)
+        VALUES (#{systemId}, #{databaseId}, #{tableName}, #{tableComment}, #{dbUser}, #{dbType},
+                #{columnCount}, #{indexCount}, #{pkColumns}, #{columnsJson}, #{indexesJson},
+                #{sourceDdl}, #{firstBatchId}, #{lastBatchId}, #{parseCount}, #{remark}, #{status},
+                #{createdBy}, #{updatedBy})
+    </insert>
+
+    <!-- 结构变更：整行快照刷新，status 拉回在用 -->
+    <update id="updateStructure">
+        UPDATE db_table_doc
+        SET table_comment = #{tableComment},
+            db_user       = #{dbUser},
+            db_type       = #{dbType},
+            column_count  = #{columnCount},
+            index_count   = #{indexCount},
+            pk_columns    = #{pkColumns},
+            columns_json  = #{columnsJson},
+            indexes_json  = #{indexesJson},
+            source_ddl    = #{sourceDdl},
+            last_batch_id = #{lastBatchId},
+            parse_count   = parse_count + 1,
+            status        = 1,
+            updated_by    = #{updatedBy}
+        WHERE id = #{id}
+    </update>
+
+    <!--
+      人工修订：页面提交的这一份就是这张表当前的结构，整行覆盖。
+      和上面导入用的 updateStructure 差在三点：
+        1) 表名允许改（导入路径里表名本来就是定位条件，不存在改名）；
+        2) parse_count 不 +1，first_batch_id / last_batch_id 不动，手工改不是又跑了一次脚本；
+        3) status 不强制拉回在用 —— 「疑似下线」是对账结论，不该因为有人改了备注就消失。
+    -->
+    <update id="updateManualStructure">
+        UPDATE db_table_doc
+        SET table_name    = #{tableName},
+            table_comment = #{tableComment},
+            db_user       = #{dbUser},
+            db_type       = #{dbType},
+            column_count  = #{columnCount},
+            index_count   = #{indexCount},
+            pk_columns    = #{pkColumns},
+            columns_json  = #{columnsJson},
+            indexes_json  = #{indexesJson},
+            source_ddl    = #{sourceDdl},
+            updated_by    = #{updatedBy}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 结构没变：只确认「这次脚本里还能看到它」 -->
+    <update id="touch">
+        UPDATE db_table_doc
+        SET parse_count = parse_count + 1,
+            status      = 1,
+            updated_by  = #{updatedBy}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 人工维护：备注与在用手/下线标记 -->
+    <update id="updateManualFields">
+        UPDATE db_table_doc
+        SET remark = #{remark},
+            status = #{status},
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectById" resultMap="DbTableDocMap">
+        SELECT t.*,
+               s.system_name AS system_name,
+               CONCAT(d.db_user, IF(d.db_name IS NULL OR d.db_name = '', '', CONCAT(' @ ', d.db_name))) AS database_label
+        FROM db_table_doc t
+        LEFT JOIN db_system s ON s.id = t.system_id
+        LEFT JOIN db_database d ON d.id = t.database_id
+        WHERE t.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectFullByDatabaseAndName" resultMap="DbTableDocMap">
+        SELECT t.* FROM db_table_doc t
+        WHERE t.database_id = #{databaseId} AND t.table_name = #{tableName}
+        LIMIT 1
+    </select>
+
+    <select id="selectNamesByDatabase" resultType="string">
+        SELECT table_name FROM db_table_doc WHERE database_id = #{databaseId}
+    </select>
+
+    <select id="selectFullByDatabase" resultMap="DbTableDocMap">
+        SELECT t.*, s.system_name AS system_name
+        FROM db_table_doc t
+        LEFT JOIN db_system s ON s.id = t.system_id
+        WHERE t.database_id = #{databaseId} AND t.status = 1
+        ORDER BY t.table_name ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectPage" resultMap="DbTableDocMap">
+        SELECT <include refid="liteColumns"/>
+        FROM db_table_doc t
+        LEFT JOIN db_system s ON s.id = t.system_id
+        LEFT JOIN db_database d ON d.id = t.database_id
+        <include refid="queryWhere"/>
+        ORDER BY t.update_time DESC, t.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countPage" resultType="int">
+        SELECT COUNT(1)
+        FROM db_table_doc t
+        <include refid="queryWhere"/>
+    </select>
+
+    <select id="countBySystem" resultType="int">
+        SELECT COUNT(1) FROM db_table_doc WHERE system_id = #{systemId}
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM db_table_doc WHERE id = #{id}
+    </delete>
+
+    <update id="renameDbUser">
+        UPDATE db_table_doc SET db_user = #{dbUser} WHERE database_id = #{databaseId}
+    </update>
+    <select id="selectIdNameByDatabase" resultMap="DbTableDocMap">
+        SELECT id, system_id, database_id, table_name, status FROM db_table_doc
+        WHERE database_id = #{databaseId}
+        ORDER BY table_name ASC
+    </select>
+
+    <update id="markOfflineByIds">
+        UPDATE db_table_doc
+        SET status = 0, updated_by = #{updatedBy}
+        WHERE id IN
+        <foreach collection="ids" item="item" open="(" separator="," close=")">#{item}</foreach>
+    </update>
+</mapper>

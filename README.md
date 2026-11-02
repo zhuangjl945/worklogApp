@@ -24,7 +24,12 @@ Spring Boot 3 + Vue 3 的医院信息运维管理平台：日常工作记录、�
 - **系统管理**：科室树、员工、人员角色、参数配置、权限设置、登记渠道（二维码）
 - **文件**：阿里云 OSS 直传；手机拍照走访客 policy
 - **认证**：JWT；口令 BCrypt（存量明文启动时迁移）
-- **数据库文档**：SQL DDL 解析引擎，自动提取表结构、字段、索引，生成 ER 关系图
+- **数据库文档**：按「业务系统 → 数据库用户 → 表」三级归档的表结构目录。SQL DDL 解析引擎自动提取表名、字段、索引、注释并生成 ER 关系图，支持 MySQL / Oracle / PostgreSQL / SQL Server / 达梦建表脚本，逐条语句隔离解析，单条不认识的写法只跳过该条并在页面提示，不会整份报错
+- **表结构增量合并**：重复分析同一张表只更新真正变了的部分（`db_table_doc` 按「库用户 + 表名」唯一），没变只累加被分析次数，变了才写一条 `db_table_version` 历史快照并给出差异摘要（新增/删除/变更了哪一列、哪个索引）；脚本里写了 `用户.表名` 限定名的会按用户各自归位，目录里没有的库用户可在同一系统下自动建档。两种合并方式：增量合并（只增改脚本里出现的表）与整库对账（额外把本次没出现的表标为「疑似下线」，不物理删除）
+- **Excel 数据字典导入**：现场拿到的常常不是建表脚本，而是厂商给的《表结构说明.xlsx》。SQL 分析页切到「Excel 数据字典」，下载模板照填，浏览器本地解析成表结构后走同一套增量合并：表名/字段名/类型/长度/可空/默认值/注释/主键/索引名/索引类型逐列识别，合并单元格（表名、库用户只写首行）自动继承，`数据库用户` 列填了就直接归位（和脚本里写 `HIS.USER_INFO` 一个效果），一次最多 500 张表。文件不出本机，后端不引额外依赖。
+- **来源留痕**：每支分析批次记 `source_type`（建表脚本 / Excel 数据字典 / 直连采集）与 `source_ref`（如「厂商表结构.xlsx（12 张表 / 86 个字段）」），分析记录页标题下直接显示；非脚本来源没有原始 SQL，`source_sql` 允许为空，不会造假文本。
+- **历史数据归类**：v1 时代留下来的「未归类」分析记录，在「分析记录」页点『归入目录』选好系统和库用户，就会拿它存过的原始 SQL 重新走一遍合并写进目录；批次列表能直接看到归属、本批新增/变更/未变张数和逐表差异结论，也能一键跳到对应的目录视图
+- **人工修订表结构**：已经登进目录的表不再只能靠重导脚本改。「表结构目录」里点『编辑结构』就能改表名、表注释、字段和索引（加字段、删字段、上下调顺序、改类型长度可空默认值注释、勾主键、改索引包含哪些字段），也能用『手工建表』把一张没有脚本的零散表直接登进目录。保存仍走同一套差异判定：真变了才覆盖当前快照并留一条不挂批次的『人工修订』版本，谁改的、改了哪一列查得到；一个字没动就不会多出重复快照。主键只认一个口径——有主键索引就按它的列回写字段标记，只勾了字段则自动合成一条；索引引用了被改名或删除的字段会被当场拦下，不会存半截结构
 - **凭据保管库**：AES-256-GCM 加密存储密码/密钥，支持分类、标签、过期提醒
 
 ## 项目截图
@@ -122,14 +127,18 @@ mysql -u root -p work_log_system < src/main/resources/db/permission_module.sql
 # 登记渠道、服务工单、工单流转日志
 mysql -u root -p work_log_system < src/main/resources/db/service_ticket_module.sql
 
-# 数据库文档分析
-mysql -u root -p work_log_system < src/main/resources/db/db_doc_module.sql
+# 数据库文档分析（批次记录）
+mysql --default-character-set=utf8mb4 -u root -p work_log_system < src/main/resources/db/db_doc_module.sql
+# 表结构目录 v2（业务系统 / 数据库用户 / 表 / 历史版本；给 db_doc 补归属、差异统计与来源列，source_sql 允许为空，含 v2.2 人工修订的 change_type 口径；可重复执行）
+mysql --default-character-set=utf8mb4 -u root -p work_log_system < src/main/resources/db/db_doc_module_v2.sql
 
 # 凭据保管库
 mysql -u root -p work_log_system < src/main/resources/db/credential_module.sql
 ```
 
 脚本均无外键，表之间是逻辑关联。
+
+含中文注释的脚本必须带 `--default-character-set=utf8mb4` 执行：Windows 上 mysql 客户端默认按 gbk 连库，不带这个参数会把列注释写成乱码，事后只能再跑 ALTER 返工。
 
 ### 3. 后端配置
 
@@ -300,7 +309,7 @@ worklog/
 │   ├── ticket/                        # 服务工单、公开登记、渠道、限流、定时确认
 │   ├── user/                          # 员工与角色
 │   ├── work/                          # 工作记录、分类、看板统计
-│   ├── dbdoc/                         # 数据库文档分析、SQL DDL 解析
+│   ├── dbdoc/                         # 数据库文档：DDL 解析、Excel 数据字典、三级目录、增量合并、版本留痕
 │   └── credential/                    # 凭据保管库、AES-256-GCM 加密
 ├── src/main/resources/
 │   ├── application.yml.example        # 配置模板

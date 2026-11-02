@@ -33,6 +33,8 @@ const TicketChannelView = () => import('../views/TicketChannelView.vue')
 const CredentialListView = () => import('../views/CredentialListView.vue')
 // 数据库文档：按需加载，ER 图依赖 ECharts
 const DbDocParseView = () => import('../views/DbDocParseView.vue')
+const DbDocCatalogView = () => import('../views/DbDocCatalogView.vue')
+const DbDocSystemView = () => import('../views/DbDocSystemView.vue')
 const DbDocListView = () => import('../views/DbDocListView.vue')
 const DbDocDetailView = () => import('../views/DbDocDetailView.vue')
 
@@ -59,6 +61,8 @@ const router = createRouter({
         { path: 'supplier/edit/:id', name: 'supplier-edit', component: SupplierEditView },
 
         // --- db-doc ---
+        { path: 'db-doc/systems', name: 'db-doc-systems', component: DbDocSystemView },
+        { path: 'db-doc/catalog', name: 'db-doc-catalog', component: DbDocCatalogView },
         { path: 'db-doc/parse', name: 'db-doc-parse', component: DbDocParseView },
         { path: 'db-doc/list', name: 'db-doc-list', component: DbDocListView },
         { path: 'db-doc/detail/:id', name: 'db-doc-detail', component: DbDocDetailView, meta: { label: '文档详情' } },

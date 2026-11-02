@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { dbDocDetail } from '../api/dbDoc'
+import { formatDocTime, normalizeDoc } from '../utils/dbDocView'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,7 +23,8 @@ async function loadDetail() {
   loading.value = true
   try {
     const resp = await dbDocDetail(id)
-    detailData.value = resp.data
+    // 表结构整份藏在 parsed_json 这个 LONGTEXT 里，先摊平成 { tables, warnings, createTime } 再渲染
+    detailData.value = normalizeDoc(resp.data)
     await nextTick()
     renderERChart()
   } catch (e) {
@@ -163,12 +165,6 @@ function renderERChart() {
   })
 }
 
-/** 格式化时间 */
-function formatTime(t) {
-  if (!t) return '-'
-  return t.replace('T', ' ').substring(0, 19)
-}
-
 /** 窗口 resize 适配 */
 function handleResize() {
   chartInstance?.resize()
@@ -186,6 +182,19 @@ onBeforeUnmount(() => {
     chartInstance = null
   }
 })
+
+/** 索引类型的中文标签 */
+function indexTypeText(type) {
+  const map = { PRIMARY: '主键', UNIQUE: '唯一', FULLTEXT: '全文', SPATIAL: '空间', INDEX: '普通' }
+  return map[type] || type || '普通'
+}
+
+/** 索引类型标签的颜色 */
+function indexTagType(type) {
+  if (type === 'PRIMARY') return 'warning'
+  if (type === 'UNIQUE') return 'success'
+  return 'info'
+}
 </script>
 
 <template>
@@ -201,9 +210,26 @@ onBeforeUnmount(() => {
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="标题">{{ detailData.title || '(未命名)' }}</el-descriptions-item>
           <el-descriptions-item label="表数量">{{ detailData.tableCount ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">{{ formatTime(detailData.createdAt) }}</el-descriptions-item>
+          <el-descriptions-item label="所属系统">{{ detailData.systemName || '未归类' }}</el-descriptions-item>
+          <el-descriptions-item label="数据库用户">{{ detailData.dbUser || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatDocTime(detailData.createTime) }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{ formatDocTime(detailData.updateTime) }}</el-descriptions-item>
         </el-descriptions>
       </el-card>
+
+      <!-- 解析告警：被跳过的语句必须让人看见，否则表数对不上只会当成 bug -->
+      <el-alert
+        v-if="detailData.warnings && detailData.warnings.length"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="warnCard"
+      >
+        <template #title>解析告警（{{ detailData.warnings.length }} 条）</template>
+        <ul class="warnList">
+          <li v-for="(w, i) in detailData.warnings" :key="i">{{ w }}</li>
+        </ul>
+      </el-alert>
 
       <!-- ER 关系图 -->
       <el-card shadow="never" class="chartCard">
@@ -225,7 +251,7 @@ onBeforeUnmount(() => {
         <template #header>
           <div class="cardHeader">
             <span class="tableName">{{ table.tableName }}</span>
-            <span v-if="table.comment" class="tableComment">{{ table.comment }}</span>
+            <span v-if="table.tableComment" class="tableComment">{{ table.tableComment }}</span>
           </div>
         </template>
 
@@ -265,11 +291,9 @@ onBeforeUnmount(() => {
                 {{ Array.isArray(row.columns) ? row.columns.join(', ') : row.columns }}
               </template>
             </el-table-column>
-            <el-table-column prop="unique" label="唯一" width="70" align="center">
+            <el-table-column prop="type" label="类型" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.unique ? 'success' : 'info'" size="small">
-                  {{ row.unique ? '是' : '否' }}
-                </el-tag>
+                <el-tag :type="indexTagType(row.type)" size="small">{{ indexTypeText(row.type) }}</el-tag>
               </template>
             </el-table-column>
           </el-table>
@@ -280,8 +304,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* ER 图和表清单都吃横向空间，跟随内容区铺满 */
 .db-doc-detail {
-  max-width: 1200px;
+  width: 100%;
 }
 
 .pageHeader {
@@ -351,4 +376,16 @@ onBeforeUnmount(() => {
   margin: 16px 0 8px;
   color: var(--g-text-secondary);
 }
+
+/* 解析告警 */
+.warnCard {
+  margin-bottom: 20px;
+}
+
+.warnList {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
 </style>

@@ -7,58 +7,88 @@
 
     <resultMap id="DbDocEntityMap" type="com.zjl.worklog.dbdoc.entity.DbDocEntity">
         <id column="id" property="id"/>
+        <result column="system_id" property="systemId"/>
+        <result column="database_id" property="databaseId"/>
+        <result column="db_user" property="dbUser"/>
         <result column="title" property="title"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="source_ref" property="sourceRef"/>
         <result column="source_sql" property="sourceSql"/>
         <result column="parsed_json" property="parsedJson"/>
         <result column="table_count" property="tableCount"/>
+        <result column="added_count" property="addedCount"/>
+        <result column="updated_count" property="updatedCount"/>
+        <result column="unchanged_count" property="unchangedCount"/>
+        <result column="missing_count" property="missingCount"/>
         <result column="created_by" property="createdBy"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
+        <result column="system_name" property="systemName"/>
+        <result column="created_by_name" property="createdByName"/>
     </resultMap>
 
-    <!-- 插入文档记录 -->
+    <!-- 批次列表只要摘要字段，原文 SQL 与解析 JSON 留给详情接口 -->
+    <sql id="liteColumns">
+        b.id, b.system_id, b.database_id, b.db_user, b.title, b.source_type, b.source_ref, b.table_count,
+        b.added_count, b.updated_count, b.unchanged_count, b.missing_count,
+        b.created_by, b.create_time, b.update_time,
+        s.system_name AS system_name,
+        (SELECT u.real_name FROM `user` u WHERE u.id = b.created_by) AS created_by_name
+    </sql>
+
+    <sql id="queryWhere">
+        <where>
+            <if test="systemId != null">AND b.system_id = #{systemId}</if>
+            <if test="databaseId != null">AND b.database_id = #{databaseId}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (b.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR b.db_user LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO db_doc (title, source_sql, parsed_json, table_count, created_by)
-        VALUES (#{title}, #{sourceSql}, #{parsedJson}, #{tableCount}, #{createdBy})
+        INSERT INTO db_doc (system_id, database_id, db_user, title, source_type, source_ref, source_sql, parsed_json,
+                            table_count, added_count, updated_count, unchanged_count, missing_count, created_by)
+        VALUES (#{systemId}, #{databaseId}, #{dbUser}, #{title}, IFNULL(#{sourceType}, 'DDL'), #{sourceRef}, #{sourceSql}, #{parsedJson},
+                #{tableCount}, #{addedCount}, #{updatedCount}, #{unchangedCount}, #{missingCount}, #{createdBy})
     </insert>
 
-    <!-- 按 ID 查询 -->
     <select id="selectById" resultMap="DbDocEntityMap">
-        SELECT id, title, source_sql, parsed_json, table_count,
-               created_by, create_time, update_time
-        FROM db_doc
-        WHERE id = #{id}
+        SELECT b.*, s.system_name AS system_name,
+               (SELECT u.real_name FROM `user` u WHERE u.id = b.created_by) AS created_by_name
+        FROM db_doc b
+        LEFT JOIN db_system s ON s.id = b.system_id
+        WHERE b.id = #{id}
         LIMIT 1
     </select>
 
-    <!-- 分页查询，按创建时间倒序 -->
     <select id="selectPage" resultMap="DbDocEntityMap">
-        SELECT id, title, source_sql, parsed_json, table_count,
-               created_by, create_time, update_time
-        FROM db_doc
-        <where>
-            <if test="keyword != null and keyword != ''">
-                AND title LIKE CONCAT('%', #{keyword}, '%')
-            </if>
-        </where>
-        ORDER BY create_time DESC
+        SELECT <include refid="liteColumns"/>
+        FROM db_doc b
+        LEFT JOIN db_system s ON s.id = b.system_id
+        <include refid="queryWhere"/>
+        ORDER BY b.create_time DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <!-- 按关键字统计总数 -->
-    <select id="countByKeyword" resultType="int">
-        SELECT COUNT(*)
-        FROM db_doc
-        <where>
-            <if test="keyword != null and keyword != ''">
-                AND title LIKE CONCAT('%', #{keyword}, '%')
-            </if>
-        </where>
+    <select id="countByCondition" resultType="int">
+        SELECT COUNT(1)
+        FROM db_doc b
+        <include refid="queryWhere"/>
     </select>
 
-    <!-- 按 ID 删除 -->
     <delete id="deleteById">
         DELETE FROM db_doc WHERE id = #{id}
     </delete>
 
+    <update id="updateStats">
+        UPDATE db_doc
+        SET table_count     = #{tableCount},
+            added_count     = #{addedCount},
+            updated_count   = #{updatedCount},
+            unchanged_count = #{unchangedCount},
+            missing_count   = #{missingCount}
+        WHERE id = #{id}
+    </update>
 </mapper>

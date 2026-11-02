@@ -1,3 +1,4 @@
+-- 表结构三级目录（业务系统 / 数据库用户 / 表 / 历史版本）见同目录 db_doc_module_v2.sql，本文件只建批次表。
 -- 数据库文档模块建表脚本
 CREATE TABLE IF NOT EXISTS db_doc (
   id bigint NOT NULL AUTO_INCREMENT COMMENT '主键',

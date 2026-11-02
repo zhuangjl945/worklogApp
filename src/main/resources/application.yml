@@ -70,4 +70,4 @@ ticket:
 
 # 凭据保管库 AES-256 密钥（Base64 编码的 32 字节）
 credential:
-  aes-key: ${CREDENTIAL_AES_KEY}
+  aes-key: ${CREDENTIAL_AES_KEY:zCAr4rIAXLyg+KdcTSdYfuKrgi8F1bzOzUR1gnEAwi4=}
