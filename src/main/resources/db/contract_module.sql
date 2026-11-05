@@ -51,7 +51,8 @@ CREATE TABLE contract_main (
 
   contract_amount DECIMAL(18,2) NOT NULL COMMENT '合同总金额（人民币）',
   start_date DATE NOT NULL COMMENT '合同开始日期',
-  end_date DATE NOT NULL COMMENT '合同结束日期',
+  end_date DATE NULL COMMENT '合同结束日期；长期合同时为空',
+  is_long_term TINYINT NOT NULL DEFAULT 0 COMMENT '是否长期有效：1是 0否',
   sign_date DATE COMMENT '签订日期',
 
   status TINYINT NOT NULL DEFAULT 10 COMMENT '状态：10草稿 30执行中 40已完成 50已终止 60已过期',

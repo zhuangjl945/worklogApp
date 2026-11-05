@@ -115,6 +115,9 @@ mysql -u root -p work_log_system < src/main/resources/db/work_category_template.
 # 供应商、合同、付款计划
 mysql -u root -p work_log_system < src/main/resources/db/contract_module.sql
 
+# 合同有效期支持「长期」（已有库升级；新库已含在 contract_module.sql）
+mysql -u root -p work_log_system < src/main/resources/db/contract_long_term.sql
+
 # 系统参数（含工单表单规则、限流、流转等预置项）
 mysql -u root -p work_log_system < src/main/resources/db/sys_config_module.sql
 

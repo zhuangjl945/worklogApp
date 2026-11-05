@@ -244,6 +244,7 @@ public class ContractController {
         renewed.setContractAmount(origin.getContractAmount());
         renewed.setStartDate(origin.getStartDate());
         renewed.setEndDate(origin.getEndDate());
+        renewed.setIsLongTerm(Boolean.TRUE.equals(origin.getIsLongTerm()));
         renewed.setSignDate(origin.getSignDate());
         renewed.setPaymentTerms(origin.getPaymentTerms());
         renewed.setPaymentSchedule(origin.getPaymentSchedule());
@@ -431,9 +432,10 @@ public class ContractController {
         dest.setSupplierId(src.getSupplierId());
         dest.setSupplierName(src.getSupplierName());
         dest.setContractAmount(src.getContractAmount());
-        dest.setStartDate(src.getStartDate());
-        dest.setEndDate(src.getEndDate());
-        dest.setIsLongTerm(src.getIsLongTerm());
+        ContractPeriod period = ContractPeriod.of(src.getStartDate(), src.getEndDate(), src.getIsLongTerm());
+        dest.setStartDate(period.startDate());
+        dest.setEndDate(period.endDate());
+        dest.setIsLongTerm(period.isLongTerm());
         dest.setSignDate(src.getSignDate());
         dest.setPaymentTerms(src.getPaymentTerms());
         dest.setContractFileUrl(src.getContractFileUrl());

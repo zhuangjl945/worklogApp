@@ -301,7 +301,7 @@ onMounted(async () => {
           <el-descriptions-item label="合同金额"><span class="amount">¥ {{ contract.contractAmount }}</span></el-descriptions-item>
           <el-descriptions-item label="签订日期">{{ contract.signDate || '-' }}</el-descriptions-item>
           <el-descriptions-item label="开始日期">{{ contract.startDate }}</el-descriptions-item>
-          <el-descriptions-item label="结束日期">{{ contract.endDate }}</el-descriptions-item>
+          <el-descriptions-item label="结束日期">{{ contract.isLongTerm ? '长期' : (contract.endDate || '-') }}</el-descriptions-item>
           <el-descriptions-item label="参与方">
             <span v-if="contract.contractDirection === 1">供应商：{{ contract.supplierName }}</span>
             <span v-else>客户：{{ contract.customerName }}</span>

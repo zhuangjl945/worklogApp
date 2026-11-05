@@ -142,7 +142,7 @@
         ) VALUES (
             #{contractNo}, #{contractName}, #{contractType}, #{contractDirection},
             #{customerId}, #{customerName}, #{supplierId}, #{supplierName},
-            #{contractAmount}, #{startDate}, #{endDate}, #{isLongTerm}, #{signDate},
+            #{contractAmount}, #{startDate}, #{endDate, jdbcType=DATE}, #{isLongTerm}, #{signDate},
             #{status}, #{paymentTerms}, #{paymentSchedule}, #{contractFileUrl},
             #{deptId}, #{managerId},
             #{createdBy}, #{updatedBy}, 0
@@ -162,8 +162,8 @@
             <if test="supplierName != null">supplier_name = #{supplierName},</if>
             <if test="contractAmount != null">contract_amount = #{contractAmount},</if>
             <if test="startDate != null">start_date = #{startDate},</if>
-            <if test="endDate != null">end_date = #{endDate},</if>
-            <if test="isLongTerm != null">is_long_term = #{isLongTerm},</if>
+            end_date = #{endDate, jdbcType=DATE},
+            is_long_term = #{isLongTerm},
             <if test="signDate != null">sign_date = #{signDate},</if>
             <if test="status != null">status = #{status},</if>
             <if test="paymentTerms != null">payment_terms = #{paymentTerms},</if>
@@ -200,6 +200,8 @@
         FROM contract_main
         WHERE deleted = 0
           <if test="status != null">AND status = #{status}</if>
+          AND (is_long_term IS NULL OR is_long_term = 0)
+          AND end_date IS NOT NULL
           AND end_date &lt;= DATE_ADD(CURDATE(), INTERVAL #{days} DAY)
         ORDER BY end_date ASC
     </select>
@@ -215,6 +217,8 @@
         WHERE deleted = 0
           <if test="status != null">AND status = #{status}</if>
           <if test="deptId != null">AND dept_id = #{deptId}</if>
+          AND (is_long_term IS NULL OR is_long_term = 0)
+          AND end_date IS NOT NULL
           AND end_date &lt;= DATE_ADD(CURDATE(), INTERVAL #{days} DAY)
         ORDER BY end_date ASC
     </select>
@@ -225,6 +229,8 @@
             updated_by = #{updatedBy}
         WHERE deleted = 0
           AND status = 30
+          AND (is_long_term IS NULL OR is_long_term = 0)
+          AND end_date IS NOT NULL
           AND end_date &lt; #{date}
     </update>
 

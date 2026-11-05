@@ -213,6 +213,17 @@ function runQuery() {
   load()
 }
 
+function onPageChange(page) {
+  filters.page = page
+  load()
+}
+
+function onSizeChange(size) {
+  filters.size = size
+  filters.page = 1
+  load()
+}
+
 const { expanded: filterExpanded, run: runSearch } = useQueryConsole({
   getSignature: () => filterSignature.value,
   runQuery

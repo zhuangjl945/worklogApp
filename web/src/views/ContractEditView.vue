@@ -34,6 +34,7 @@ const form = reactive({
   contractAmount: 0,
   startDate: '',
   endDate: '',
+  isLongTerm: false,
   signDate: '',
   paymentTerms: 1,
   deptId: null,
@@ -69,7 +70,20 @@ const rules = {
   contractDirection: [{ required: true, message: '请选择合同方向', trigger: 'change' }],
   contractAmount: [{ required: true, message: '请输入合同总额', trigger: 'blur' }],
   startDate: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
-  endDate: [{ required: true, message: '请选择结束日期', trigger: 'change' }]
+  endDate: [{
+    validator: (_rule, value, callback) => {
+      if (form.isLongTerm) {
+        callback()
+        return
+      }
+      if (!value) {
+        callback(new Error('请选择结束日期'))
+        return
+      }
+      callback()
+    },
+    trigger: 'change'
+  }]
 }
 
 const suppliers = ref([])
@@ -163,6 +177,8 @@ async function loadDetail() {
     }
 
     Object.assign(form, data)
+    form.isLongTerm = !!data.isLongTerm
+    if (form.isLongTerm) form.endDate = ''
     if (typeof data.paymentSchedule === 'string') {
       form.paymentSchedule = JSON.parse(data.paymentSchedule || '[]')
     }
@@ -182,9 +198,21 @@ function removePlan(index) {
   form.paymentSchedule.splice(index, 1)
 }
 
+function onLongTermChange(on) {
+  if (on) {
+    form.endDate = ''
+    formRef.value?.clearValidate?.('endDate')
+    if (form.paymentTerms === 4) {
+      ElMessage.warning('长期合同无法按止期自动生成月结计划，请改用分期或一次性')
+      form.paymentTerms = 1
+      form.paymentSchedule = []
+    }
+  }
+}
+
 function generateMonthlyPlans() {
-  if (!form.startDate || !form.endDate) {
-    ElMessage.warning('请先选择合同开始和结束日期')
+  if (form.isLongTerm || !form.startDate || !form.endDate) {
+    ElMessage.warning(form.isLongTerm ? '长期合同请手工维护付款计划' : '请先选择合同开始和结束日期')
     form.paymentTerms = 1
     return
   }
@@ -304,11 +332,16 @@ async function submit() {
         form.contractFileUrl = allUrls.length > 0 ? JSON.stringify(allUrls) : ''
       }
 
+      const payload = {
+        ...form,
+        isLongTerm: !!form.isLongTerm,
+        endDate: form.isLongTerm ? null : form.endDate
+      }
       if (isEdit) {
-        await contractUpdate(id, form)
+        await contractUpdate(id, payload)
         ElMessage.success('更新成功')
       } else {
-        const resp = await contractCreate(form)
+        const resp = await contractCreate(payload)
         ElMessage.success('创建成功')
         router.replace(`/contract/detail/${resp.data.id}`)
       }
@@ -425,7 +458,17 @@ onMounted(async () => {
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="有效期（止）" prop="endDate">
-              <el-date-picker v-model="form.endDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+              <div class="end-date-row">
+                <el-date-picker
+                  v-model="form.endDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  :disabled="form.isLongTerm"
+                  placeholder="选择结束日期"
+                  style="flex: 1; min-width: 0"
+                />
+                <el-checkbox v-model="form.isLongTerm" @change="onLongTermChange">长期</el-checkbox>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
@@ -575,6 +618,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.end-date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
 .page {
   padding: 0;
   background-color: var(--g-bg-subtle);

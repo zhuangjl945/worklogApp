@@ -376,7 +376,9 @@ function checkOverflow(e, row, field) {
           </template>
         </el-table-column>
         <el-table-column prop="startDate" label="开始" width="110" />
-        <el-table-column prop="endDate" label="结束" width="110" />
+        <el-table-column label="结束" width="110">
+          <template #default="{ row }">{{ row.isLongTerm ? '长期' : (row.endDate || '—') }}</template>
+        </el-table-column>
         <el-table-column label="附件" width="88" :cell-class-name="() => 'no-row-click'">
           <template #default="{ row }">
             <template v-if="rowFiles(row).length">
