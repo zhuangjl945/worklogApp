@@ -140,7 +140,7 @@ class DbTableImportServiceTest {
     }
 
     @Test
-    @DisplayName("MERGE 只留缺失痕迹；REPLACE 才把没出现的表标成疑似下线")
+    @DisplayName("MERGE 不给没出现的表留痕迹；REPLACE 才记 MISSING 并标成疑似下线")
     void testMissingHandling() {
         stubParse(schema("NEW_TABLE", "新表", col("id", "BIGINT", false)));
         DbTableDocEntity stale = new DbTableDocEntity();
@@ -153,16 +153,20 @@ class DbTableImportServiceTest {
         when(tableDocMapper.selectIdNameByDatabase(10L)).thenReturn(List.of(stale));
 
         ImportResult merged = service.importSql(request(1L, 10L), 9L);
-        assertEquals(1, merged.getMissingCount());
-        assertTrue(merged.getMissingTables().contains("OLD_TABLE"));
+        assertEquals(0, merged.getMissingCount());
+        assertTrue(merged.getMissingTables().isEmpty());
         verify(tableDocMapper, never()).markOfflineByIds(anyList(), anyLong());
+        // 补一张新表只给这张新表写版本，同库老表不记「本次未出现」
+        verify(versionMapper, times(1)).insert(any(DbTableVersionEntity.class));
 
         ImportRequest replace = request(1L, 10L);
         replace.setMode(DbTableImportService.MODE_REPLACE);
         ImportResult result = service.importSql(replace, 9L);
         assertEquals(1, result.getMissingCount());
-        // 一轮 MERGE + 一轮 REPLACE，各写 1 条 NEW 和 1 条 MISSING，共 4 条版本，且一张表都没被物理删掉
-        verify(versionMapper, times(4)).insert(any(DbTableVersionEntity.class));
+        assertTrue(result.getMissingTables().contains("OLD_TABLE"));
+        // MERGE 的 1 条 NEW + REPLACE 的 1 条 NEW 和 1 条 MISSING，且一张表都没被物理删掉
+        verify(versionMapper, times(3)).insert(any(DbTableVersionEntity.class));
+        verify(tableDocMapper).markOfflineByIds(List.of(88L), 9L);
         verify(tableDocMapper, never()).deleteById(anyLong());
     }
 

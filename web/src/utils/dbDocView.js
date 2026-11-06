@@ -69,6 +69,21 @@ function normalizeColumn(raw) {
   }
 }
 
+/** 表结构清单的固定顺序：表名优先，同名再按表注释。空注释排在有注释的前面。 */
+export function compareTables(a, b) {
+  const byName = compareTableText(a?.tableName, b?.tableName)
+  if (byName !== 0) return byName
+  return compareTableText(a?.tableComment, b?.tableComment)
+}
+
+function compareTableText(a, b) {
+  return String(a || '').localeCompare(String(b || ''), 'zh-CN', { numeric: true, sensitivity: 'base' })
+}
+
+export function sortTables(tables) {
+  return [...(tables || [])].sort(compareTables)
+}
+
 /** 单张表归一：顺手算出唯一 key，同名表挂在不同库用户下时折叠面板不会串；SQL 分析页也用它把解析结果喂给同一个组件 */
 export function normalizeTable(raw) {
   const tableName = raw.tableName || '(未命名表)'
@@ -138,7 +153,7 @@ export function normalizeDoc(raw) {
     createTime: batch.createTime || batch.createdAt || '',
     updateTime: batch.updateTime || batch.updatedAt || '',
     sourceSql: batch.sourceSql || '',
-    tables: tableList.map(normalizeTable),
+    tables: sortTables(tableList.map(normalizeTable)),
     warnings: pickList(batch.warnings, parsed, 'warnings').filter(Boolean),
     dbUsers: pickList(batch.dbUsers, parsed, 'dbUsers').filter(Boolean),
     changes,

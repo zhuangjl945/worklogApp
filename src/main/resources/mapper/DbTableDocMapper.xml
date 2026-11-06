@@ -159,7 +159,7 @@
         FROM db_table_doc t
         LEFT JOIN db_system s ON s.id = t.system_id
         WHERE t.database_id = #{databaseId} AND t.status = 1
-        ORDER BY t.table_name ASC
+        ORDER BY t.table_name ASC, t.table_comment ASC, t.id ASC
         LIMIT #{limit}
     </select>
 
@@ -169,7 +169,7 @@
         LEFT JOIN db_system s ON s.id = t.system_id
         LEFT JOIN db_database d ON d.id = t.database_id
         <include refid="queryWhere"/>
-        ORDER BY t.update_time DESC, t.id DESC
+        ORDER BY t.table_name ASC, t.table_comment ASC, t.id ASC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 

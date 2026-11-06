@@ -39,7 +39,7 @@ import java.util.Set;
  *   - 目录里没有        → 新增，并留一份 NEW 版本；
  *   - 结构确实变了      → 覆盖当前快照，并留一份 CHANGED 版本 + 差异摘要；
  *   - 结构没变          → 只把「被分析次数 +1」，不产生新版本，避免历史被无效快照淹没；
- *   - 脚本里没出现的表  → 记 MISSING（MERGE 只留痕；REPLACE 额外标成疑似下线，绝不物理删除）。
+ *   - 脚本里没出现的表  → 增量合并完全不碰；整库对账才记 MISSING，并标成疑似下线（绝不物理删除）。
  *
  * 脚本里写了 USER.TABLE 限定名时，会按前缀自动归到对应库用户下（找不到就在同一系统下建），
  * 这样一个 Oracle 全库导出脚本也能一次导完，而不是全塞进一个用户里。
@@ -209,8 +209,10 @@ public class DbTableImportService {
             }
         }
 
-        // 缺失登记：目录里有、这次脚本里没有的表
-        collectMissing(keepByDatabase, mode, batch.getId(), operatorId, result);
+        // 只有整库对账才登记「脚本里没出现的表」。日常补一张新表时，不给同库其它表刷历史。
+        if (MODE_REPLACE.equals(mode)) {
+            collectMissing(keepByDatabase, batch.getId(), operatorId, result);
+        }
 
         batchMapper.updateStats(batch.getId(), parsed.getTables().size(),
                 result.getAddedCount(), result.getUpdatedCount(),
@@ -648,8 +650,8 @@ public class DbTableImportService {
         return item(incoming, db, CT_CHANGED, diff.summary(), oldColumnCount, columnCount(incoming), existing.getId());
     }
 
-    /** 算出「本次脚本没出现的既有表」，按需标记疑似下线 */
-    private void collectMissing(Map<Long, Set<String>> keepByDatabase, String mode,
+    /** 整库对账：目录里有、这次脚本里没有的表，记一条 MISSING，并把在用的标成疑似下线。 */
+    private void collectMissing(Map<Long, Set<String>> keepByDatabase,
                                 Long batchId, Long operatorId, ImportResult result) {
         List<Long> offlineIds = new ArrayList<>();
         for (Map.Entry<Long, Set<String>> entry : keepByDatabase.entrySet()) {
@@ -660,7 +662,7 @@ public class DbTableImportService {
                 }
                 result.getMissingTables().add(row.getTableName());
                 writeMissingVersion(row, batchId, operatorId);
-                if (MODE_REPLACE.equals(mode) && row.getStatus() != null && row.getStatus() == 1) {
+                if (row.getStatus() != null && row.getStatus() == 1) {
                     offlineIds.add(row.getId());
                 }
                 result.setMissingCount(result.getMissingCount() + 1);

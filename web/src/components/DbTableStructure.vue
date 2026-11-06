@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { indexTagType, indexTypeText } from '../utils/dbDocView'
+import { indexTagType, indexTypeText, sortTables } from '../utils/dbDocView'
 
 /**
  * 表结构清单组件。
@@ -15,11 +15,12 @@ const props = defineProps({
 })
 
 const active = ref([])
+const sortedTables = computed(() => sortTables(props.tables))
 
 watch(
-  () => props.tables,
+  sortedTables,
   (list) => {
-    active.value = (list || []).slice(0, props.expandCount).map(tableKey)
+    active.value = list.slice(0, props.expandCount).map(tableKey)
   },
   { immediate: true }
 )
@@ -30,14 +31,14 @@ function tableKey(t) {
 }
 
 function expandAll() {
-  active.value = (props.tables || []).map(tableKey)
+  active.value = sortedTables.value.map(tableKey)
 }
 
 function collapseAll() {
   active.value = []
 }
 
-const columnTotal = computed(() => (props.tables || []).reduce((sum, t) => sum + (t.columns ? t.columns.length : 0), 0))
+const columnTotal = computed(() => sortedTables.value.reduce((sum, t) => sum + (t.columns ? t.columns.length : 0), 0))
 const indexTotal = computed(() => (props.tables || []).reduce((sum, t) => sum + (t.indexes ? t.indexes.length : 0), 0))
 </script>
 
@@ -54,7 +55,7 @@ const indexTotal = computed(() => (props.tables || []).reduce((sum, t) => sum + 
       </div>
 
       <el-collapse v-model="active">
-        <el-collapse-item v-for="t in tables" :key="tableKey(t)" :name="tableKey(t)">
+        <el-collapse-item v-for="t in sortedTables" :key="tableKey(t)" :name="tableKey(t)">
           <template #title>
             <div class="db-ts-head">
               <span class="db-ts-name">{{ t.tableName }}</span>

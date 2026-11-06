@@ -22,6 +22,7 @@ SELECT * FROM (
   SELECT 'permission' AS a, 'user.manage'            AS b, 'ADMIN'      AS c, '员工与角色管理'        AS d, '新增员工、改姓名科室、授予或收回角色、启用禁用账号' AS e, 0 AS f
   UNION ALL SELECT 'permission','dept.manage',        'ADMIN',     '科室管理',        '新建/修改/停用/删除科室与科室层级', 1
   UNION ALL SELECT 'permission','sysConfig.manage',   'ADMIN',     '参数配置',        '查看并修改系统参数（上传限制、限流、紧急程度等）', 2
+  UNION ALL SELECT 'permission','credential.manage',  'ADMIN',     '凭据保管库',      '查看、解密、新增、修改、删除凭据（含数据库口令）', 10
   UNION ALL SELECT 'permission','permission.manage',  'ADMIN',     '权限设置',        '调整其他权限点的角色门槛（固定，不可下调）', 3
   UNION ALL SELECT 'permission','workCategory.manage','DEPT_ADMIN','工作分类维护',    '新建/修改/停用工作分类及其填写模板', 4
   UNION ALL SELECT 'permission','ticketChannel.manage','DEPT_ADMIN','登记渠道维护',   '新建/修改手机端问题登记渠道与二维码', 5

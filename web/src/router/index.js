@@ -31,6 +31,7 @@ const TicketDetailView = () => import('../views/TicketDetailView.vue')
 const TicketChannelView = () => import('../views/TicketChannelView.vue')
 // 凭据保管库：敏感数据单独拆页，首屏不必多背一个加解密组件
 const CredentialListView = () => import('../views/CredentialListView.vue')
+const SqlSnippetView = () => import('../views/SqlSnippetView.vue')
 // 数据库文档：按需加载，ER 图依赖 ECharts
 const DbDocParseView = () => import('../views/DbDocParseView.vue')
 const DbDocCatalogView = () => import('../views/DbDocCatalogView.vue')
@@ -66,6 +67,7 @@ const router = createRouter({
         { path: 'db-doc/parse', name: 'db-doc-parse', component: DbDocParseView },
         { path: 'db-doc/list', name: 'db-doc-list', component: DbDocListView },
         { path: 'db-doc/detail/:id', name: 'db-doc-detail', component: DbDocDetailView, meta: { label: '文档详情' } },
+        { path: 'sql-snippets', name: 'sql-snippets', component: SqlSnippetView },
 
         // --- contract ---
         { path: 'contract/list', name: 'contract-list', component: ContractListView },
@@ -75,7 +77,7 @@ const router = createRouter({
         { path: 'contract/payment/:contractId', name: 'contract-payment', component: ContractPaymentView },
 
         // --- credential vault ---
-        { path: 'credential', name: 'credential', component: CredentialListView },
+        { path: 'credential', name: 'credential', component: CredentialListView, meta: { roles: ['ADMIN'], permission: 'credential.manage' } },
 
         // --- 系统管理：直接敲 URL 也要拦，菜单隐藏只是不给人误点 ---
         // roles = 代码内置下限（配置读不到时兜底）；permission = 可在「权限设置」里调高的权限点

@@ -5,7 +5,7 @@ import { Check, Download, Refresh, Search, Warning } from '@element-plus/icons-v
 import { dbDatabaseCreate, dbDatabaseEnabled, dbDocParse, dbImport, dbPreviewDiff, dbSystemCreate, dbSystemList } from '../api/dbDoc'
 import DbDictExcelImport from '../components/DbDictExcelImport.vue'
 import DbTableStructure from '../components/DbTableStructure.vue'
-import { changeTagType, changeTypeText, normalizeTable } from '../utils/dbDocView'
+import { changeTagType, changeTypeText, normalizeTable, sortTables } from '../utils/dbDocView'
 
 const DB_TYPES = ['mysql', 'oracle', 'postgresql', 'sqlserver', 'dm', 'kingbase']
 const ENVS = [
@@ -149,7 +149,7 @@ const warnings = ref([])
 const scriptDbUsers = ref([])
 const diff = ref(null)
 
-const normalizedTables = computed(() => tables.value.map(normalizeTable))
+const normalizedTables = computed(() => sortTables(tables.value.map(normalizeTable)))
 
 const isDict = computed(() => sourceKind.value === 'dict')
 const dictTables = computed(() => (isDict.value ? dict.value.tables || [] : []))
@@ -367,7 +367,7 @@ onMounted(loadSystems)
       </el-form>
       <el-alert type="info" :closable="false" show-icon class="modeHint">
         <template #title>
-          <span v-if="target.mode === 'MERGE'">增量合并：只新增和更新本次来源里出现的表，目录里其它表原样保留（日常补表用这个）。</span>
+          <span v-if="target.mode === 'MERGE'">增量合并：只新增和更新本次来源里出现的表。目录里其它表原样保留，也不会记「本次未出现」（日常补表用这个）。</span>
           <span v-else>整库对账：本次来源里没有、但目录里挂在这个用户下的表会被标成「疑似下线」，不会物理删除，确认后可再手动清。</span>
         </template>
       </el-alert>

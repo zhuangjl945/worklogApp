@@ -30,7 +30,7 @@ Spring Boot 3 + Vue 3 的医院信息运维管理平台：日常工作记录、�
 - **来源留痕**：每支分析批次记 `source_type`（建表脚本 / Excel 数据字典 / 直连采集）与 `source_ref`（如「厂商表结构.xlsx（12 张表 / 86 个字段）」），分析记录页标题下直接显示；非脚本来源没有原始 SQL，`source_sql` 允许为空，不会造假文本。
 - **历史数据归类**：v1 时代留下来的「未归类」分析记录，在「分析记录」页点『归入目录』选好系统和库用户，就会拿它存过的原始 SQL 重新走一遍合并写进目录；批次列表能直接看到归属、本批新增/变更/未变张数和逐表差异结论，也能一键跳到对应的目录视图
 - **人工修订表结构**：已经登进目录的表不再只能靠重导脚本改。「表结构目录」里点『编辑结构』就能改表名、表注释、字段和索引（加字段、删字段、上下调顺序、改类型长度可空默认值注释、勾主键、改索引包含哪些字段），也能用『手工建表』把一张没有脚本的零散表直接登进目录。保存仍走同一套差异判定：真变了才覆盖当前快照并留一条不挂批次的『人工修订』版本，谁改的、改了哪一列查得到；一个字没动就不会多出重复快照。主键只认一个口径——有主键索引就按它的列回写字段标记，只勾了字段则自动合成一条；索引引用了被改名或删除的字段会被当场拦下，不会存半截结构
-- **凭据保管库**：AES-256-GCM 加密存储密码/密钥，支持分类、标签、过期提醒
+- **凭据保管库**：AES-256-GCM 加密存储密码/密钥，支持分类、标签、过期提醒。仅系统管理员可访问（`credential.manage`，下限 ADMIN）
 
 ## 项目截图
 
@@ -137,6 +137,11 @@ mysql --default-character-set=utf8mb4 -u root -p work_log_system < src/main/reso
 
 # 凭据保管库
 mysql -u root -p work_log_system < src/main/resources/db/credential_module.sql
+
+# 个人常用 SQL
+mysql --default-character-set=utf8mb4 -u root -p work_log_system < src/main/resources/db/sql_snippet.sql
+# 常用 SQL 补充分类、数据库类型（已有库升级；新库已含在 sql_snippet.sql）
+mysql --default-character-set=utf8mb4 -u root -p work_log_system < src/main/resources/db/sql_snippet_catalog.sql
 ```
 
 脚本均无外键，表之间是逻辑关联。
@@ -263,6 +268,7 @@ npm run dev
 | 跨科室（看板「全部」、报表选科室） | ✗ | ✗ | ✓ |
 | 工作分类 / 登记渠道 | 只读 | 可维护 | 可维护 |
 | 科室 / 员工与角色 / 参数 / 权限页 | ✗ | ✗ | ✓ |
+| 凭据保管库（含解密明文） | ✗ | ✗ | ✓ |
 
 两层收口不要混用：
 
@@ -276,6 +282,7 @@ npm run dev
 | `user.manage` | ADMIN | 员工与角色 |
 | `dept.manage` | ADMIN | 科室 |
 | `sysConfig.manage` | ADMIN | 参数配置 |
+| `credential.manage` | ADMIN | 凭据保管库（列表、解密、增删改） |
 | `permission.manage` | ADMIN（不可调） | 权限设置本身 |
 | `workCategory.manage` | DEPT_ADMIN | 工作分类 |
 | `ticketChannel.manage` | DEPT_ADMIN | 登记渠道 |

@@ -24,6 +24,8 @@ class PermissionTest {
     @Test
     @DisplayName("配置低于内置下限一律被抬回下限（只可收紧，不可放宽）")
     void clampNeverGoesBelowFloor() {
+        assertEquals(Role.ADMIN, Permission.CREDENTIAL_MANAGE.clamp(Role.USER));
+        assertEquals(Role.ADMIN, Permission.CREDENTIAL_MANAGE.clamp(Role.DEPT_ADMIN));
         assertEquals(Role.ADMIN, Permission.USER_MANAGE.clamp(Role.USER));
         assertEquals(Role.ADMIN, Permission.USER_MANAGE.clamp(Role.DEPT_ADMIN));
         assertEquals(Role.DEPT_ADMIN, Permission.WORK_CATEGORY_MANAGE.clamp(Role.USER));
@@ -57,7 +59,7 @@ class PermissionTest {
         }
         assertFalse(keys.contains(Permission.NONE.getKey()));
         // 数量变了要同步 README 的权限点表格与权限设置页
-        assertEquals(11, keys.size(), "权限点数量与文档不一致：README「权限设置」小节");
+        assertEquals(12, keys.size(), "权限点数量与文档不一致：README「权限设置」小节");
     }
 
     @Test

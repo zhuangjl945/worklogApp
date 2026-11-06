@@ -27,6 +27,8 @@ public enum Permission {
             "新建/修改/停用/删除科室与科室层级", "系统管理", false),
     SYS_CONFIG_MANAGE("sysConfig.manage", "参数配置", Role.ADMIN,
             "查看并修改系统参数（上传限制、限流、紧急程度等）", "系统管理", false),
+    CREDENTIAL_MANAGE("credential.manage", "凭据保管库", Role.ADMIN,
+            "查看、解密、新增、修改、删除凭据（含数据库口令）", "系统管理", false),
     // 不给配置：能改权限的入口一旦可调，一次误操作就会让所有人都再也改不回权限。
     // 「固定」由 isLocked() 表达，别把它误当 placeholder 传进构造器——那样整行会从清单里消失。
     PERMISSION_MANAGE("permission.manage", "权限设置", Role.ADMIN,

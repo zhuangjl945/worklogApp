@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
-import { HomeFilled, Document, OfficeBuilding, UserFilled, TrendCharts, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DocumentCopy, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon, Lock, Files, Connection } from '@element-plus/icons-vue'
+import { HomeFilled, Document, OfficeBuilding, UserFilled, Tickets, Postcard, CollectionTag, FolderOpened, Bell, Setting, DataBoard, Notebook, PieChart, EditPen, Fold, Expand, Close, Microphone, Mute, Key, Avatar, View as ViewIcon, Lock, Files, Connection, DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { can, clearProfile, ensurePermissions, ensureProfile, roleLabel } from '../utils/auth'
 import { workRecordTransferAccept, workRecordTransferPending, workRecordTransferReject } from '../api/work'
@@ -43,48 +43,58 @@ const displayName = computed(() => user.value?.realName || user.value?.username 
 const menuLabelMap = {}
 // roles 是代码内置下限（权限配置读不到时兜底），permission 是「权限设置」里可调的那道门槛。
 // 两者都写是因为二者语义一致（最低角色），但 permission 的值由管理员配置，可能高于内置下限。
-const menuItems = [
-  { path: '/home', label: '首页', icon: HomeFilled },
-  { path: '/board', label: '看板', icon: ViewIcon },
-  { path: '/work-records', label: '工作记录', icon: EditPen },
-  { path: '/tickets', label: '问题受理', icon: Tickets },
+const menuSections = [
   {
-    label: '数据库文档',
-    icon: DocumentCopy,
-    children: [
-      { path: '/db-doc/catalog', label: '表结构目录', icon: Files },
-      { path: '/db-doc/parse', label: 'SQL 分析', icon: EditPen },
-      { path: '/db-doc/systems', label: '系统与库用户', icon: Connection },
-      { path: '/db-doc/list', label: '分析记录', icon: Document }
+    label: '日常',
+    items: [
+      { path: '/home', label: '首页', icon: HomeFilled },
+      { path: '/board', label: '看板', icon: ViewIcon },
+      { path: '/work-records', label: '工作记录', icon: EditPen },
+      { path: '/tickets', label: '问题受理', icon: Tickets }
     ]
   },
   {
-    label: '合同管理',
-    icon: DocumentCopy,
-    children: [
-      { path: '/contract/list', label: '合同列表', icon: Document },
-      { path: '/supplier/list', label: '供应商管理', icon: OfficeBuilding }
+    label: '资料',
+    items: [
+      {
+        label: '数据库文档',
+        icon: DataBoard,
+        children: [
+          { path: '/db-doc/catalog', label: '表结构目录', icon: Files },
+          { path: '/db-doc/parse', label: 'SQL 分析', icon: EditPen },
+          { path: '/db-doc/systems', label: '系统与库用户', icon: Connection },
+          { path: '/db-doc/list', label: '分析记录', icon: Document }
+        ]
+      },
+      { path: '/sql-snippets', label: '常用 SQL', icon: DocumentCopy },
+      {
+        label: '合同管理',
+        icon: Notebook,
+        children: [
+          { path: '/contract/list', label: '合同列表', icon: Document },
+          { path: '/supplier/list', label: '供应商管理', icon: OfficeBuilding }
+        ]
+      },
+      { path: '/credential', label: '凭据保管库', icon: Lock, roles: ['ADMIN'], permission: 'credential.manage' },
+      { path: '/reports/workload-category', label: '报表统计', tabLabel: '工作量分类统计', icon: PieChart }
     ]
   },
-  { path: '/credential', label: '凭据保管库', icon: Lock },
   {
-    label: '报表统计',
-    icon: TrendCharts,
-    children: [
-      { path: '/reports/workload-category', label: '工作量分类统计', icon: PieChart }
-    ]
-  },
-  {
-    label: '系统管理',
-    icon: Setting,
-    children: [
-      { path: '/depts', label: '科室管理', icon: FolderOpened, roles: ['ADMIN'], permission: 'dept.manage' },
-      { path: '/users', label: '员工管理', icon: UserFilled, roles: ['ADMIN'], permission: 'user.manage' },
-      { path: '/user-roles', label: '人员角色设置', icon: Avatar, roles: ['ADMIN'], permission: 'user.manage' },
-      { path: '/work-categories', label: '工作分类维护', icon: CollectionTag, roles: ['DEPT_ADMIN'], permission: 'workCategory.manage' },
-      { path: '/ticket-channels', label: '登记渠道维护', icon: Postcard, roles: ['DEPT_ADMIN'], permission: 'ticketChannel.manage' },
-      { path: '/sys-configs', label: '参数配置', icon: Setting, roles: ['ADMIN'], permission: 'sysConfig.manage' },
-      { path: '/permissions', label: '权限设置', icon: Key, roles: ['ADMIN'], permission: 'permission.manage' }
+    label: '管理',
+    items: [
+      {
+        label: '系统管理',
+        icon: Setting,
+        children: [
+          { path: '/depts', label: '科室管理', icon: FolderOpened, roles: ['ADMIN'], permission: 'dept.manage' },
+          { path: '/users', label: '员工管理', icon: UserFilled, roles: ['ADMIN'], permission: 'user.manage' },
+          { path: '/user-roles', label: '人员角色设置', icon: Avatar, roles: ['ADMIN'], permission: 'user.manage' },
+          { path: '/work-categories', label: '工作分类维护', icon: CollectionTag, roles: ['DEPT_ADMIN'], permission: 'workCategory.manage' },
+          { path: '/ticket-channels', label: '登记渠道维护', icon: Postcard, roles: ['DEPT_ADMIN'], permission: 'ticketChannel.manage' },
+          { path: '/sys-configs', label: '参数配置', icon: Setting, roles: ['ADMIN'], permission: 'sysConfig.manage' },
+          { path: '/permissions', label: '权限设置', icon: Key, roles: ['ADMIN'], permission: 'permission.manage' }
+        ]
+      }
     ]
   }
 ]
@@ -96,19 +106,23 @@ function filterMenuByPermission(items) {
     .filter((item) => (item.children ? item.children.length > 0 : can(item.permission, item.roles)))
 }
 
-const visibleMenuItems = computed(() => filterMenuByPermission(menuItems))
+const visibleSections = computed(() =>
+  menuSections
+    .map((section) => ({ ...section, items: filterMenuByPermission(section.items) }))
+    .filter((section) => section.items.length > 0)
+)
 
 // 扁平化菜单并构建映射（用未过滤的全量，已打开的 Tab 才能拿到标签）
-function flattenMenu(items, parentLabel = '') {
+function flattenMenu(items) {
   items.forEach(item => {
     if (item.children) {
-      flattenMenu(item.children, item.label)
-    } else {
-      menuLabelMap[item.path] = item.label
+      flattenMenu(item.children)
+    } else if (item.path) {
+      menuLabelMap[item.path] = item.tabLabel || item.label
     }
   })
 }
-flattenMenu(menuItems)
+menuSections.forEach((section) => flattenMenu(section.items))
 
 function switchTab(path) {
   activeTab.value = path
@@ -385,11 +399,7 @@ onUnmounted(() => {
 
     <div class="body" :class="{ collapsed: isSiderCollapsed }">
       <!-- 侧边栏 -->
-      <aside class="sider" :class="{ collapsed: isSiderCollapsed }">
-        <button class="siderToggle" type="button" @click="toggleSider">
-          <el-icon :size="16"><component :is="isSiderCollapsed ? Expand : Fold" /></el-icon>
-        </button>
-
+      <aside class="sider" :class="{ collapsed: isSiderCollapsed }" aria-label="主导航">
         <el-menu
           :default-active="route.path"
           class="menu"
@@ -401,36 +411,38 @@ onUnmounted(() => {
           active-text-color="#171717"
           @select="(path) => switchTab(path)"
         >
-          <template v-for="item in visibleMenuItems" :key="item.path || item.label">
-            <el-sub-menu v-if="item.children" :index="item.label">
-              <template #title>
-                <el-icon v-if="item.icon" class="menuIcon"><component :is="item.icon" /></el-icon>
-                <span class="menuLabel">{{ item.label }}</span>
-              </template>
-              <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+          <el-menu-item-group v-for="section in visibleSections" :key="section.label" :title="section.label">
+            <template v-for="item in section.items" :key="item.path || item.label">
+              <el-sub-menu v-if="item.children" :index="item.label">
                 <template #title>
-                  <el-icon v-if="child.icon" class="menuIcon"><component :is="child.icon" /></el-icon>
-                  <span class="menuLabel">{{ child.label }}</span>
+                  <el-icon v-if="item.icon" class="menuIcon"><component :is="item.icon" /></el-icon>
+                  <span class="menuLabel">{{ item.label }}</span>
                 </template>
+                <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+                  <template #title>
+                    <el-icon v-if="child.icon" class="menuIcon"><component :is="child.icon" /></el-icon>
+                    <span class="menuLabel">{{ child.label }}</span>
+                  </template>
+                </el-menu-item>
+              </el-sub-menu>
+              <el-menu-item v-else :index="item.path">
+                <el-icon class="menuIcon"><component :is="item.icon" /></el-icon>
+                <span class="menuLabel">{{ item.label }}</span>
               </el-menu-item>
-            </el-sub-menu>
-            <el-menu-item v-else :index="item.path">
-              <el-icon class="menuIcon"><component :is="item.icon" /></el-icon>
-              <span class="menuLabel">{{ item.label }}</span>
-            </el-menu-item>
-          </template>
+            </template>
+          </el-menu-item-group>
         </el-menu>
 
-        <div class="siderFooter" v-show="!isSiderCollapsed">
-          <div class="footDivider" />
-          <div class="footUser">
-            <span class="footAvatar">{{ displayName[0] }}</span>
-            <div class="footMeta">
-              <span class="footName">{{ displayName }}</span>
-              <span class="footRole" :class="'role-' + (user && user.role ? user.role : 'USER')">{{ roleLabel }}</span>
-            </div>
-          </div>
-        </div>
+        <button
+          class="siderToggle"
+          type="button"
+          :aria-expanded="!isSiderCollapsed"
+          :aria-label="isSiderCollapsed ? '展开导航' : undefined"
+          @click="toggleSider"
+        >
+          <el-icon :size="16"><component :is="isSiderCollapsed ? Expand : Fold" /></el-icon>
+          <span v-if="!isSiderCollapsed">收起导航</span>
+        </button>
       </aside>
 
       <!-- 主内容区 -->
@@ -640,26 +652,40 @@ onUnmounted(() => {
 }
 
 .siderToggle {
-  position: absolute;
-  top: 12px;
-  right: -12px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--g-bg);
-  border: 1px solid var(--g-border);
-  display: grid;
-  place-items: center;
+  flex-shrink: 0;
+  margin: 4px 8px 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--g-radius);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
-  z-index: 10;
   color: var(--g-text-muted);
-  box-shadow: var(--g-shadow-sm);
-  transition: all 0.15s;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sider.collapsed .siderToggle {
+  width: 36px;
+  margin: 8px auto;
+  padding: 0;
+  justify-content: center;
 }
 
 .siderToggle:hover {
   background: var(--g-bg-muted);
   color: var(--g-text);
+}
+
+.siderToggle:focus-visible {
+  outline: 2px solid var(--g-text);
+  outline-offset: 2px;
 }
 
 /* 菜单样式覆盖 */
@@ -671,6 +697,24 @@ onUnmounted(() => {
   padding: 8px 0;
 }
 
+.menu :deep(.el-menu-item-group__title) {
+  padding: 16px 16px 6px !important;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  color: var(--g-text-faint) !important;
+  user-select: none;
+}
+
+.menu :deep(.el-menu-item-group:first-child > .el-menu-item-group__title) {
+  padding-top: 8px !important;
+}
+
+.menu.el-menu--collapse :deep(.el-menu-item-group__title) {
+  display: none;
+}
+
 .menu :deep(.el-menu-item) {
   height: 38px;
   line-height: 38px;
@@ -679,8 +723,7 @@ onUnmounted(() => {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--g-text-muted) !important;
-  border-left: 2px solid transparent;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .menu :deep(.el-menu-item:hover) {
@@ -688,11 +731,12 @@ onUnmounted(() => {
   color: var(--g-text-secondary) !important;
 }
 
-.menu :deep(.el-menu-item.is-active) {
-  background-color: var(--g-bg-muted) !important;
+.menu :deep(.el-menu-item.is-active),
+.menu :deep(.el-menu-item.is-active:hover) {
+  background-color: var(--g-bg) !important;
   color: var(--g-text) !important;
   font-weight: 600;
-  border-left-color: var(--g-text);
+  box-shadow: inset 3px 0 0 var(--g-text);
 }
 
 .menu :deep(.el-menu-item.is-active .el-icon) {
@@ -756,10 +800,12 @@ onUnmounted(() => {
   color: var(--g-text) !important;
 }
 
-.menu :deep(.el-menu--popup .el-menu-item.is-active) {
-  background-color: var(--g-bg-muted) !important;
+.menu :deep(.el-menu--popup .el-menu-item.is-active),
+.menu :deep(.el-menu--popup .el-menu-item.is-active:hover) {
+  background-color: var(--g-bg) !important;
   color: var(--g-text) !important;
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--g-text);
 }
 
 .menu :deep(.el-menu--inline .el-menu-item) {
@@ -772,11 +818,12 @@ onUnmounted(() => {
   color: var(--g-text-secondary) !important;
 }
 
-.menu :deep(.el-menu--inline .el-menu-item.is-active) {
-  background-color: var(--g-bg-muted) !important;
-  border-left-color: var(--g-text);
+.menu :deep(.el-menu--inline .el-menu-item.is-active),
+.menu :deep(.el-menu--inline .el-menu-item.is-active:hover) {
+  background-color: var(--g-bg) !important;
   color: var(--g-text) !important;
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--g-text);
 }
 
 .menuIcon {
@@ -799,65 +846,6 @@ onUnmounted(() => {
 
 .sider.collapsed .menuLabel {
   opacity: 0;
-}
-
-.siderFooter {
-  padding: 12px 16px;
-  margin-top: auto;
-}
-
-.footDivider {
-  height: 1px;
-  background: var(--g-border);
-  margin-bottom: 12px;
-}
-
-.footUser {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.footAvatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--g-bg-muted);
-  color: var(--g-text-muted);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.footMeta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.footName {
-  font-size: 12px;
-  color: var(--g-text-muted);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.footRole {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--g-text-faint);
-  white-space: nowrap;
-}
-
-.footRole.role-DEPT_ADMIN {
-  color: #1d4ed8;
-}
-
-.footRole.role-ADMIN {
-  color: var(--g-text);
 }
 
 /* ========================================

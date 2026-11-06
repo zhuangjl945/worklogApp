@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zjl.worklog.sqlsnippet.mapper.SqlSnippetMapper">
+
+    <sql id="Filters">
+        <if test="keyword != null and keyword != ''">
+            AND (
+                title LIKE CONCAT('%', #{keyword}, '%')
+                OR sql_text LIKE CONCAT('%', #{keyword}, '%')
+                OR remark LIKE CONCAT('%', #{keyword}, '%')
+                OR category LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="category != null and category != ''">
+            AND category = #{category}
+        </if>
+        <if test="dbType != null and dbType != ''">
+            AND db_type = #{dbType}
+        </if>
+    </sql>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM sql_snippet
+        WHERE created_by = #{userId}
+        <include refid="Filters"/>
+    </select>
+
+    <select id="selectPage" resultType="com.zjl.worklog.sqlsnippet.entity.SqlSnippet">
+        SELECT id, title, category, db_type, sql_text, remark, created_by, create_time, update_time
+        FROM sql_snippet
+        WHERE created_by = #{userId}
+        <include refid="Filters"/>
+        ORDER BY id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="selectCategories" resultType="string">
+        SELECT DISTINCT category
+        FROM sql_snippet
+        WHERE created_by = #{userId}
+          AND category IS NOT NULL
+          AND category &lt;&gt; ''
+        ORDER BY category
+    </select>
+
+    <select id="selectById" resultType="com.zjl.worklog.sqlsnippet.entity.SqlSnippet">
+        SELECT id, title, category, db_type, sql_text, remark, created_by, create_time, update_time
+        FROM sql_snippet
+        WHERE id = #{id}
+          AND created_by = #{userId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sql_snippet (title, category, db_type, sql_text, remark, created_by)
+        VALUES (#{title}, #{category}, #{dbType}, #{sqlText}, #{remark}, #{createdBy})
+    </insert>
+
+    <update id="update">
+        UPDATE sql_snippet
+        SET title = #{title},
+            category = #{category},
+            db_type = #{dbType},
+            sql_text = #{sqlText},
+            remark = #{remark}
+        WHERE id = #{id}
+          AND created_by = #{createdBy}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sql_snippet
+        WHERE id = #{id}
+          AND created_by = #{userId}
+    </delete>
+</mapper>

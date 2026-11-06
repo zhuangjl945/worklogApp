@@ -5,6 +5,9 @@ import com.zjl.worklog.common.api.PageResponse;
 import com.zjl.worklog.common.exception.BizException;
 import com.zjl.worklog.credential.entity.CredentialEntity;
 import com.zjl.worklog.credential.mapper.CredentialMapper;
+import com.zjl.worklog.security.Permission;
+import com.zjl.worklog.security.RequireRole;
+import com.zjl.worklog.security.Role;
 import com.zjl.worklog.security.UserContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -29,6 +32,9 @@ import java.util.stream.Collectors;
 @Validated
 @RestController
 @RequestMapping("/api/credential")
+// 库里是全员共享的口令，解密接口一旦放开就是把数据库密码交给任意登录用户。
+// 下限固定 ADMIN，权限点只允许再收紧，不允许放到普通员工。
+@RequireRole(value = Role.ADMIN, permission = Permission.CREDENTIAL_MANAGE)
 public class CredentialController {
 
     /** 即将过期的天数阈值 */

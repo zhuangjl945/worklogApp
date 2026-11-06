@@ -73,7 +73,7 @@ public class ContractController {
         checkContractNoUnique(req.getContractNo(), id);
         CurrentUser cu = getCurrentUser();
 
-        copyProperties(req, existed);
+        applyDraftFields(existed, req);
         existed.setUpdatedBy(cu.getId());
 
         contractMainMapper.update(existed);
@@ -422,6 +422,15 @@ public class ContractController {
         return newNo;
     }
 
+    /**
+     * 草稿可编辑字段。科室以更新前的值为准，请求体里的 deptId 一律丢掉。
+     */
+    void applyDraftFields(ContractMainEntity existed, BaseContractRequest req) {
+        Long ownerDeptId = existed.getDeptId();
+        copyProperties(req, existed);
+        existed.setDeptId(ownerDeptId);
+    }
+
     private void copyProperties(BaseContractRequest src, ContractMainEntity dest) {
         dest.setContractNo(src.getContractNo());
         dest.setContractName(src.getContractName());
@@ -439,7 +448,8 @@ public class ContractController {
         dest.setSignDate(src.getSignDate());
         dest.setPaymentTerms(src.getPaymentTerms());
         dest.setContractFileUrl(src.getContractFileUrl());
-        dest.setDeptId(src.getDeptId());
+        // 科室不从请求体拷贝。创建接口在拷贝后强制写成当前用户科室；
+        // 草稿更新走 applyDraftFields，保留库里的原科室。
         dest.setManagerId(src.getManagerId());
         try {
             dest.setPaymentSchedule(objectMapper.writeValueAsString(src.getPaymentSchedule()));

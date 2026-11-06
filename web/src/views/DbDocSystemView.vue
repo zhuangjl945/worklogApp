@@ -14,6 +14,7 @@ import {
   dbSystemUpdate
 } from '../api/dbDoc'
 import { credentialList } from '../api/credential'
+import { can } from '../utils/auth'
 
 // 数据库类型与环境是有限取值，做成下拉而不是自由输入：
 // 唯一键里有 env，随手写「生产1」就会多出一条目录。
@@ -95,8 +96,14 @@ async function loadDatabases() {
   }
 }
 
-/** 载入可关联的凭据（失败不拦主流程，只是下拉为空） */
+const canLinkCredential = computed(() => can('credential.manage', ['ADMIN']))
+
+/** 载入可关联的凭据。普通员工没有凭据库权限，直接跳过，避免进页面就弹一条 403。 */
 async function loadCredentials() {
+  if (!canLinkCredential.value) {
+    credentials.value = []
+    return
+  }
   try {
     // 只取数据库类凭据，够关联下拉用
     const resp = await credentialList({ category: 'database', page: 1, size: 200 })
@@ -475,7 +482,7 @@ onMounted(() => {
             </template>
           </el-input>
         </el-form-item>
-        <el-form-item label="关联凭据">
+        <el-form-item v-if="canLinkCredential" label="关联凭据">
           <el-select v-model="dbDialog.form.credentialId" clearable filterable placeholder="口令存凭据保管库，这里只关联 ID" style="width: 100%">
             <el-option v-for="item in credentialOptions" :key="item.value" :value="item.value" :label="item.label" />
           </el-select>
