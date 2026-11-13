@@ -74,6 +74,13 @@ public class TicketRateLimiter {
         }
     }
 
+    /** 丢掉一个维度的计数。登录成功时用来解开这个账号刚才的失败记录。 */
+    public void forget(String key) {
+        if (key != null) {
+            windows.remove(key);
+        }
+    }
+
     /** 清理长期不活跃的窗口，防止被恶意刷 key 把内存堆满 */
     private void purgeIfDue() {
         long now = System.currentTimeMillis();

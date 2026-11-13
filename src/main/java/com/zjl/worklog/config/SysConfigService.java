@@ -42,6 +42,16 @@ public class SysConfigService {
     public static final String KEY_CHANNEL_QPM = "channel_qpm";
     /** 同一手机号每小时上限 */
     public static final String KEY_PHONE_HOUR = "phone_hour";
+    /** 登录接口单 IP 在窗口内允许的尝试次数 */
+    public static final String KEY_LOGIN_IP_COUNT = "login_ip_count";
+    /** 登录接口单 IP 限流窗口（秒） */
+    public static final String KEY_LOGIN_IP_WINDOW_SECONDS = "login_ip_window_seconds";
+    /** 同一账号连续登录失败多少次后锁定 */
+    public static final String KEY_LOGIN_FAIL_PER_USER = "login_fail_per_user";
+    /** 同一 IP 在锁定期内允许的登录失败次数 */
+    public static final String KEY_LOGIN_FAIL_PER_IP = "login_fail_per_ip";
+    /** 登录失败锁定的滑动窗口（秒） */
+    public static final String KEY_LOGIN_LOCK_WINDOW_SECONDS = "login_lock_window_seconds";
 
     /** 快照有效期：30 秒。对以分钟/小时计的限流与时长参数，这个滞后可以忽略 */
     private static final long TTL_MS = 30_000L;

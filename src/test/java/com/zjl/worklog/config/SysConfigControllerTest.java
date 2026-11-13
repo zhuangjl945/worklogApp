@@ -57,6 +57,11 @@ class SysConfigControllerTest {
     @DisplayName("只有运行期真有读取方的键算生效")
     void runtimeEffectiveWhitelist() {
         assertTrue(SysConfigController.isRuntimeEffective("rate_limit", "ip_count"));
+        assertTrue(SysConfigController.isRuntimeEffective("rate_limit", "login_ip_count"));
+        assertTrue(SysConfigController.isRuntimeEffective("rate_limit", "login_ip_window_seconds"));
+        assertTrue(SysConfigController.isRuntimeEffective("rate_limit", "login_fail_per_user"));
+        assertTrue(SysConfigController.isRuntimeEffective("rate_limit", "login_fail_per_ip"));
+        assertTrue(SysConfigController.isRuntimeEffective("rate_limit", "login_lock_window_seconds"));
         assertTrue(SysConfigController.isRuntimeEffective("system", "jwt_expire_seconds"));
         assertTrue(SysConfigController.isRuntimeEffective("upload", "max_file_size_mb"));
         // 整组放行：紧急程度/工单流转/登记表单都是动态键

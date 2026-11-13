@@ -1,7 +1,7 @@
 ﻿<script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { login } from '../api/auth'
+import { fetchCaptcha, login } from '../api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -9,16 +9,35 @@ const route = useRoute()
 const formRef = ref()
 const form = reactive({
   username: '',
-  password: ''
+  password: '',
+  captchaId: '',
+  captchaCode: ''
 })
+const captchaImage = ref('')
 
 const loading = ref(false)
 const errorMsg = ref('')
 
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  captchaCode: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
 }
+
+async function loadCaptcha() {
+  const resp = await fetchCaptcha()
+  form.captchaId = resp.data?.captchaId || ''
+  captchaImage.value = resp.data?.image || ''
+  form.captchaCode = ''
+}
+
+function refreshCaptcha() {
+  loadCaptcha().catch((e) => {
+    errorMsg.value = e?.message || '验证码获取失败'
+  })
+}
+
+onMounted(refreshCaptcha)
 
 async function onSubmit() {
   errorMsg.value = ''
@@ -27,7 +46,7 @@ async function onSubmit() {
 
     loading.value = true
     try {
-      const resp = await login(form.username, form.password)
+      const resp = await login(form.username, form.password, form.captchaId, form.captchaCode)
 
       const auth = `${resp.data.tokenType || 'Bearer'} ${resp.data.token}`
       localStorage.setItem('access_token', auth)
@@ -36,6 +55,11 @@ async function onSubmit() {
       await router.replace(redirect)
     } catch (e) {
       errorMsg.value = e?.message || '登录失败'
+      try {
+        await loadCaptcha()
+      } catch (captchaError) {
+        errorMsg.value = captchaError?.message || errorMsg.value
+      }
     } finally {
       loading.value = false
     }
@@ -91,6 +115,22 @@ async function onSubmit() {
                 autocomplete="current-password"
                 @keyup.enter="onSubmit"
               />
+            </el-form-item>
+
+            <el-form-item label="验证码" prop="captchaCode">
+              <div class="captchaRow">
+                <el-input
+                  v-model="form.captchaCode"
+                  placeholder="请输入验证码"
+                  maxlength="8"
+                  autocomplete="off"
+                  @keyup.enter="onSubmit"
+                />
+                <button type="button" class="captchaBtn" title="换一张" @click="refreshCaptcha">
+                  <img v-if="captchaImage" :src="captchaImage" alt="验证码，点击换一张" />
+                  <span v-else>获取验证码</span>
+                </button>
+              </div>
             </el-form-item>
 
             <el-button class="submit" type="primary" :loading="loading" @click="onSubmit">登录</el-button>
@@ -228,6 +268,39 @@ async function onSubmit() {
   color: var(--g-danger);
   font-size: 13px;
   font-weight: 500;
+}
+
+.captchaRow {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.captchaRow :deep(.el-input) {
+  flex: 1;
+}
+
+.captchaBtn {
+  width: 112px;
+  height: 40px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--g-border);
+  border-radius: var(--g-radius);
+  background: #fff;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.captchaBtn img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.captchaBtn span {
+  font-size: 12px;
+  color: var(--g-text-muted);
 }
 
 .submit {

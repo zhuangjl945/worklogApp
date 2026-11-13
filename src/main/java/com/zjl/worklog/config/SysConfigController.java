@@ -44,7 +44,8 @@ public class SysConfigController {
      *
      * <p>每一项都必须能指出读它的代码，新增消费方时记得同步登记：
      * <ul>
-     *   <li>rate_limit.* → TicketService 的提交/渠道/手机号限流（走 SysConfigService 的 30 秒快照）</li>
+     *   <li>rate_limit.ip_count / channel_qpm / phone_hour → TicketService 的提交限流</li>
+     *   <li>rate_limit.login_* → LoginGuard 的登录限速与失败锁定</li>
      *   <li>system.jwt_expire_seconds → JwtTokenService 签发时读取（只允许缩短）</li>
      *   <li>upload.max_file_size_mb → OssController#policy 的直传大小上限</li>
      *   <li>urgency.* / ticket_flow.* / ticket_form.* → TicketService 的受理时限、自动确认、登记表单必填规则</li>
@@ -59,6 +60,11 @@ public class SysConfigController {
             "rate_limit|ip_window_seconds",
             "rate_limit|channel_qpm",
             "rate_limit|phone_hour",
+            "rate_limit|login_ip_count",
+            "rate_limit|login_ip_window_seconds",
+            "rate_limit|login_fail_per_user",
+            "rate_limit|login_fail_per_ip",
+            "rate_limit|login_lock_window_seconds",
             "system|jwt_expire_seconds",
             "upload|max_file_size_mb",
             "urgency|*",

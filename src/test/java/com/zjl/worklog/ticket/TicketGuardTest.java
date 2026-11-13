@@ -74,6 +74,9 @@ class TicketGuardTest {
         assertFalse(limiter.acquire("submit:ip:10.0.0.1", 3, 60), "第 4 次应被拒");
         // 换 IP 不受影响
         assertTrue(limiter.acquire("submit:ip:10.0.0.2", 3, 60));
+        // 登录成功后要能清掉该账号的失败计数，否则合法用户会被自己刚才的输错锁在门外
+        limiter.forget("submit:ip:10.0.0.1");
+        assertTrue(limiter.acquire("submit:ip:10.0.0.1", 3, 60), "忘记该键后应重新放行");
     }
 
     @Test

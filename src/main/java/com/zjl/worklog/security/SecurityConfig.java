@@ -45,10 +45,12 @@ public class SecurityConfig {
                                 "/assets/**",
                                 "/vite.svg",
                                 "/favicon.ico",
-                                "/api/auth/login"
+                                "/api/auth/login",
+                                "/api/auth/captcha"
                         ).permitAll()
-                        // 手机端问题登记：静态页面入口 + 免登录接口
-                                // 免登录接口靠「服务端签发的一次性 form token + 三级限流 + 蜜罐」保护，不靠登录态；
+                        // 登录接口本身不靠登录态。暴力破解由验证码、IP 限速和失败锁定挡住，见 LoginGuard。
+                        // 手机端问题登记：静态页面入口 + 免登录接口
+                                // 免登录接口靠「服务端签发的一次性 form token + 三级限流 + 蜜罐」保护，不靠登录态；
                                 // 二维码里不含任何凭据（原方案的 HMAC 签名已作废，见实施方案附录 B.1）
                         .requestMatchers(
                                 "/m",

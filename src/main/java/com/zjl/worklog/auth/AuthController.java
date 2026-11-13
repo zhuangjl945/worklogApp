@@ -1,5 +1,6 @@
 package com.zjl.worklog.auth;
 
+import com.zjl.worklog.auth.dto.CaptchaResponse;
 import com.zjl.worklog.auth.dto.LoginRequest;
 import com.zjl.worklog.auth.dto.LoginResponse;
 import com.zjl.worklog.common.api.ApiResponse;
@@ -11,6 +12,7 @@ import com.zjl.worklog.security.Role;
 import com.zjl.worklog.security.UserContext;
 import com.zjl.worklog.user.entity.UserEntity;
 import com.zjl.worklog.user.mapper.UserMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,27 +27,47 @@ public class AuthController {
     private final UserMapper userMapper;
     private final PasswordService passwordService;
     private final JwtTokenService tokenService;
+    private final LoginGuard loginGuard;
+    private final LoginCaptchaService captchaService;
 
     public AuthController(UserMapper userMapper,
                           PasswordService passwordService,
-                          JwtTokenService tokenService) {
+                          JwtTokenService tokenService,
+                          LoginGuard loginGuard,
+                          LoginCaptchaService captchaService) {
         this.userMapper = userMapper;
         this.passwordService = passwordService;
         this.tokenService = tokenService;
+        this.loginGuard = loginGuard;
+        this.captchaService = captchaService;
+    }
+
+    @GetMapping("/captcha")
+    public ApiResponse<CaptchaResponse> captcha() {
+        LoginCaptchaService.Issued issued = captchaService.issue();
+        return ApiResponse.ok(new CaptchaResponse(issued.id(), issued.image()));
     }
 
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest req) {
+    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest req, HttpServletRequest request) {
+        String ip = clientIp(request);
+        loginGuard.checkAttempt(req.getUsername(), ip);
+        captchaService.verifyAndConsume(req.getCaptchaId(), req.getCaptchaCode());
+
         UserEntity user = userMapper.selectByUsername(req.getUsername());
         if (user == null) {
+            loginGuard.onFailure(req.getUsername(), ip);
             throw new BizException(4001, "用户名或密码错误");
         }
         if (user.getStatus() != null && user.getStatus() == 0) {
+            loginGuard.onFailure(req.getUsername(), ip);
             throw new BizException(4002, "账号已被禁用");
         }
         if (!passwordService.matchesAndUpgrade(user, req.getPassword())) {
+            loginGuard.onFailure(req.getUsername(), ip);
             throw new BizException(4001, "用户名或密码错误");
         }
+        loginGuard.onSuccess(req.getUsername(), ip);
 
         Role role = Role.of(user.getRole());
         String token = tokenService.generateToken(user.getId(), user.getUsername(), user.getDeptId(), user.getRealName(), role);
@@ -87,5 +109,18 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Boolean> logout() {
         return ApiResponse.ok(true);
+    }
+
+    /**
+     * 取真实来访 IP。
+     * application.yml 里开了 server.forward-headers-strategy=framework，
+     * Spring 已经解析过 X-Forwarded-For，所以直接 getRemoteAddr 即可。
+     */
+    private static String clientIp(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String ip = request.getRemoteAddr();
+        return ip == null || ip.isBlank() ? "unknown" : ip.trim();
     }
 }

@@ -35,6 +35,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // 3) 静态资源与 SPA 页面壳（.html）不需要身份。
         // 注意：跳过过滤器意味着 UserContext 为空，这些接口内部绝不可依赖登录态。
         return "/api/auth/login".equals(uri)
+                || "/api/auth/captcha".equals(uri)
                 || uri.startsWith("/api/public/")
                 || uri.startsWith("/assets/")
                 || uri.endsWith(".html");

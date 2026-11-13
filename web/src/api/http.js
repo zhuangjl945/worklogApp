@@ -20,7 +20,8 @@ function notifyForbidden(msg) {
 
 http.interceptors.request.use((config) => {
   // 登录接口不携带 Token
-  if (config.url === '/auth/login' || config.url === 'auth/login') {
+  if (config.url === '/auth/login' || config.url === 'auth/login'
+      || config.url === '/auth/captcha' || config.url === 'auth/captcha') {
     return config
   }
   const auth = localStorage.getItem('access_token')

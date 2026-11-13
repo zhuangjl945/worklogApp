@@ -32,6 +32,11 @@ INSERT INTO sys_config (config_group, config_key, config_value, config_label, co
 ('rate_limit', 'ip_window_seconds',    '600',          'IP窗口时长(秒)',   '限流滑动窗口长度',                        2),
 ('rate_limit', 'channel_qpm',          '60',           '渠道每分钟上限',   '单个登记渠道每分钟允许提交数',              3),
 ('rate_limit', 'phone_hour',           '5',            '手机号每小时上限', '同一手机号每小时允许提交数',               4),
+('rate_limit', 'login_ip_count',          '30',   '登录IP次数',         '同一 IP 在窗口内允许的登录尝试次数',                         5),
+('rate_limit', 'login_ip_window_seconds', '60',   '登录IP窗口(秒)',     '登录限速的滑动窗口长度',                                     6),
+('rate_limit', 'login_fail_per_user',     '5',    '账号失败锁定次数',   '同一账号连续登录失败达到该次数后锁定',                       7),
+('rate_limit', 'login_fail_per_ip',       '30',   'IP失败锁定次数',     '同一 IP 在锁定期内允许的登录失败次数，办公室共用出口时不宜过小', 8),
+('rate_limit', 'login_lock_window_seconds','900', '登录锁定时长(秒)',   '登录失败锁定的滑动窗口，默认 15 分钟',                       9),
 
 -- OSS 存储
 ('oss', 'endpoint',                'oss-cn-hangzhou.aliyuncs.com', 'OSS Endpoint',       '阿里云 OSS 接入点',           1),
@@ -112,4 +117,20 @@ SELECT * FROM (
 ) AS seed
 WHERE NOT EXISTS (
   SELECT 1 FROM `sys_config` s WHERE s.config_group = 'logging' AND s.config_key = seed.b
+);
+
+-- ============================================================
+-- 已建库升级用：补上登录限速与失败锁定（重复执行安全）
+-- 只在键不存在时插入，管理员改过的值不会被覆盖
+-- ============================================================
+INSERT INTO `sys_config` (config_group, config_key, config_value, config_label, config_desc, sort_order)
+SELECT * FROM (
+  SELECT 'rate_limit' AS a, 'login_ip_count' AS b, '30' AS c, '登录IP次数' AS d, '同一 IP 在窗口内允许的登录尝试次数' AS e, 5 AS f
+  UNION ALL SELECT 'rate_limit','login_ip_window_seconds','60','登录IP窗口(秒)','登录限速的滑动窗口长度',6
+  UNION ALL SELECT 'rate_limit','login_fail_per_user','5','账号失败锁定次数','同一账号连续登录失败达到该次数后锁定',7
+  UNION ALL SELECT 'rate_limit','login_fail_per_ip','30','IP失败锁定次数','同一 IP 在锁定期内允许的登录失败次数，办公室共用出口时不宜过小',8
+  UNION ALL SELECT 'rate_limit','login_lock_window_seconds','900','登录锁定时长(秒)','登录失败锁定的滑动窗口，默认 15 分钟',9
+) AS seed
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_config` s WHERE s.config_group = 'rate_limit' AND s.config_key = seed.b
 );
